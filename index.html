@@ -767,51 +767,61 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   設為 Highlight
 </div>
 
-<!-- New Article modal (full page) -->
+<!-- New Article modal (mirrors reading page layout) -->
 <div class="new-modal" id="new-modal">
-  <div class="new-modal-topbar">
-    <button class="icon-btn" onclick="closeNewModal()" title="關閉">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-    </button>
-    <h2>新增文章</h2>
-    <div style="display:flex;gap:8px">
-      <button class="btn" onclick="runNewAi()" id="new-ai-btn">✦ AI 分析</button>
-      <button class="btn btn-primary" id="new-save-btn" onclick="saveNewArticle()">儲存</button>
+  <!-- Toolbar -->
+  <div class="reading-toolbar-wrap">
+    <div class="reading-toolbar" id="new-toolbar">
+      <button class="icon-btn" onclick="closeNewModal()" title="取消">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+      </button>
+      <div class="tb-sep"></div>
+      <!-- Tag dropdown -->
+      <button class="tb-btn" id="new-tb-tag-btn" onclick="toggleNewDropdown('new-tag-dropdown')" title="標籤">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+        TAG
+      </button>
+      <!-- Folder dropdown -->
+      <button class="tb-btn" id="new-tb-folder-btn" onclick="toggleNewDropdown('new-folder-dropdown')" title="資料夾">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+      </button>
+      <div class="tb-spacer"></div>
+      <button class="tb-btn" id="new-ai-btn" onclick="runNewAi()" title="AI分析">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="m9 12 2 2 4-4"/></svg>
+        ✦ AI
+      </button>
+      <button class="btn btn-primary" id="new-save-btn" onclick="saveNewArticle()" style="height:30px;padding:0 14px;font-size:13px">儲存</button>
+    </div>
+    <!-- Tag dropdown -->
+    <div class="tb-dropdown left" id="new-tag-dropdown">
+      <div class="tb-dropdown-label">新增標籤</div>
+      <input class="tb-drop-input" id="new-tag-input" placeholder="輸入後按 Enter…" onkeydown="handleNewTagInput(event)" />
+      <div class="tb-dropdown-label">現有標籤</div>
+      <div id="new-tag-list"></div>
+    </div>
+    <!-- Folder dropdown -->
+    <div class="tb-dropdown right" id="new-folder-dropdown">
+      <div class="tb-dropdown-label">選擇資料夾</div>
+      <div id="new-folder-list"></div>
     </div>
   </div>
-  <div class="new-card">
-    <div class="new-card-inner">
-      <div>
-        <div class="field-label">標題</div>
-        <input class="field-input" id="new-title" placeholder="文章標題" />
-      </div>
-      <div>
-        <div class="field-label">內文（貼上原文）</div>
-        <textarea class="field-input" id="new-body" placeholder="貼上文章全文…" style="min-height:320px"></textarea>
-      </div>
-      <!-- Collapsible meta -->
-      <div>
-        <div class="meta-toggle" id="meta-toggle" onclick="toggleMetaPanel()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-          標籤與資料夾
-        </div>
-        <div class="meta-panel" id="meta-panel">
-          <div class="meta-row">
-            <div>
-              <div class="field-label">標籤（逗號分隔）</div>
-              <input class="field-input" id="new-tags" placeholder="心理學, 認知偏誤" />
-            </div>
-            <div>
-              <div class="field-label">資料夾</div>
-              <select class="field-input" id="new-folder"></select>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div id="new-ai-loading" style="display:none" class="ai-loading">
+
+  <!-- Title bar -->
+  <div class="reading-title-bar">
+    <textarea class="reading-title-input" id="new-title" rows="1"
+      placeholder="文章標題…"
+      oninput="autoResizeTitle(this)"></textarea>
+    <div class="reading-meta-row" id="new-meta-row"></div>
+  </div>
+
+  <!-- Body + Notes split (same as reading page) -->
+  <div class="reading-body-wrap">
+    <div class="reading-body-pane" id="new-body-pane">
+      <textarea class="art-body-editor" id="new-body" placeholder="貼上文章內文…" style="min-height:calc(100vh - 200px)"></textarea>
+      <div id="new-ai-loading" style="display:none;margin-top:12px" class="ai-loading">
         <div class="spinner"></div> AI 分析中…
       </div>
-      <div id="new-ai-section" style="display:none">
+      <div id="new-ai-section" style="display:none;margin-top:12px">
         <div class="ai-section">
           <div class="ai-label">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="m9 12 2 2 4-4"/></svg>
@@ -821,6 +831,13 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
           <div class="ai-tags" id="new-ai-tags"></div>
         </div>
       </div>
+    </div>
+    <div class="reading-notes-pane" id="new-notes-pane">
+      <div class="notes-pane-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5l4 4L7 21l-4 1 1-4z"/></svg>
+        我的筆記
+      </div>
+      <textarea class="notes-pane-textarea" id="new-notes" placeholder="記下你的想法…"></textarea>
     </div>
   </div>
 </div>
@@ -1539,36 +1556,113 @@ window.runAiAnalysis = async () => {
 };
 
 // ── New article modal ──
-window.toggleMetaPanel = () => {
-  const panel = document.getElementById('meta-panel');
-  const toggle = document.getElementById('meta-toggle');
-  panel.classList.toggle('open');
-  toggle.classList.toggle('open');
-};
+// New article state
+let newTags = [];
+let newFolderId = null;
 
 window.openNewModal = () => {
+  newTags = [];
+  newFolderId = currentFolderId || null;
   document.getElementById('new-title').value = '';
   document.getElementById('new-body').value = '';
-  document.getElementById('new-tags').value = '';
+  document.getElementById('new-notes').value = '';
   document.getElementById('new-ai-section').style.display = 'none';
   document.getElementById('new-ai-loading').style.display = 'none';
-  document.getElementById('meta-panel').classList.remove('open');
-  document.getElementById('meta-toggle').classList.remove('open');
   document.getElementById('new-save-btn').disabled = false;
   document.getElementById('new-save-btn').textContent = '儲存';
-  renderFolderSelects();
+  renderNewMetaRow();
+  renderNewTagDropdown();
+  renderNewFolderDropdown();
   document.getElementById('new-modal').classList.add('open');
-  setTimeout(() => document.getElementById('new-title').focus(), 50);
+  setTimeout(() => { const t = document.getElementById('new-title'); t.focus(); autoResizeTitle(t); }, 50);
 };
-window.closeNewModal = () => document.getElementById('new-modal').classList.remove('open');
+
+window.closeNewModal = () => {
+  document.getElementById('new-modal').classList.remove('open');
+  closeNewDropdowns();
+};
+
+function renderNewMetaRow() {
+  const row = document.getElementById('new-meta-row');
+  row.innerHTML = newTags.map(t =>
+    `<span class="reading-meta-tag" onclick="removeNewTag('${escHtml(t)}')">${escHtml(t)} ×</span>`
+  ).join('');
+  if (newFolderId) {
+    const f = folders.find(f => f.id === newFolderId);
+    if (f) row.innerHTML += `<span class="reading-meta-tag" style="background:var(--accent2-light);color:var(--accent2);border-color:rgba(193,127,58,0.3)" onclick="newFolderId=null;renderNewMetaRow()">📁 ${escHtml(f.name)} ×</span>`;
+  }
+}
+
+function renderNewTagDropdown() {
+  const list = document.getElementById('new-tag-list');
+  const allTags = new Set(articles.flatMap(a => a.tags||[]));
+  list.innerHTML = '';
+  [...allTags].sort().forEach(tag => {
+    const active = newTags.includes(tag);
+    const item = document.createElement('div');
+    item.className = 'tb-drop-item' + (active ? ' active' : '');
+    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> ${escHtml(tag)}`;
+    item.onclick = () => {
+      if (newTags.includes(tag)) newTags = newTags.filter(t => t !== tag);
+      else newTags.push(tag);
+      renderNewTagDropdown(); renderNewMetaRow();
+    };
+    list.appendChild(item);
+  });
+}
+
+window.handleNewTagInput = (e) => {
+  if (e.key === 'Enter') {
+    const val = e.target.value.trim();
+    if (val && !newTags.includes(val)) { newTags.push(val); renderNewTagDropdown(); renderNewMetaRow(); }
+    e.target.value = '';
+  }
+};
+
+window.removeNewTag = (tag) => { newTags = newTags.filter(t => t !== tag); renderNewMetaRow(); renderNewTagDropdown(); };
+
+function renderNewFolderDropdown() {
+  const list = document.getElementById('new-folder-list');
+  list.innerHTML = '';
+  const none = document.createElement('div');
+  none.className = 'tb-drop-item' + (!newFolderId ? ' active' : '');
+  none.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> 無資料夾`;
+  none.onclick = () => { newFolderId = null; renderNewMetaRow(); closeNewDropdowns(); };
+  list.appendChild(none);
+  folders.forEach(f => {
+    const item = document.createElement('div');
+    item.className = 'tb-drop-item' + (newFolderId === f.id ? ' active' : '');
+    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(f.name)}`;
+    item.onclick = () => { newFolderId = f.id; renderNewMetaRow(); closeNewDropdowns(); };
+    list.appendChild(item);
+  });
+}
+
+window.toggleNewDropdown = (id) => {
+  const dd = document.getElementById(id);
+  const isOpen = dd.classList.contains('open');
+  closeNewDropdowns();
+  if (!isOpen) dd.classList.add('open');
+};
+function closeNewDropdowns() {
+  ['new-tag-dropdown','new-folder-dropdown'].forEach(id => {
+    document.getElementById(id)?.classList.remove('open');
+  });
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('#new-toolbar') && !e.target.closest('.tb-dropdown')) closeNewDropdowns();
+});
 
 window.runNewAi = async () => {
   const title = document.getElementById('new-title').value.trim();
   const body = document.getElementById('new-body').value.trim();
   if (!title && !body) { showToast('請先填寫標題或內文'); return; }
+  const btn = document.getElementById('new-ai-btn');
+  const origHTML = btn.innerHTML;
+  btn.innerHTML = '<div class="spinner"></div>';
+  btn.disabled = true;
   document.getElementById('new-ai-loading').style.display = 'flex';
   document.getElementById('new-ai-section').style.display = 'none';
-  document.getElementById('new-ai-btn').disabled = true;
   try {
     const result = await callGemini(`以下是一篇文章，請用繁體中文：1) 寫一段3句話以內的摘要；2) 建議3-5個標籤。
 格式嚴格如下（不要其他文字）：
@@ -1585,24 +1679,25 @@ window.runNewAi = async () => {
     const tagsDiv = document.getElementById('new-ai-tags');
     tagsDiv.innerHTML = '';
     suggestedTags.forEach(tag => {
-      const btn = document.createElement('button');
-      btn.className = 'ai-tag-suggest';
-      btn.textContent = tag;
-      btn.onclick = () => {
-        const cur = document.getElementById('new-tags').value.trim();
-        const existing = cur ? cur.split(',').map(t=>t.trim()) : [];
-        if (!existing.includes(tag)) {
-          document.getElementById('new-tags').value = [...existing, tag].join(', ');
-          btn.style.background = 'var(--accent2)';
-          btn.style.color = '#fff';
+      const tagBtn = document.createElement('button');
+      tagBtn.className = 'ai-tag-suggest';
+      tagBtn.textContent = tag;
+      tagBtn.onclick = () => {
+        if (!newTags.includes(tag)) {
+          newTags.push(tag);
+          renderNewTagDropdown();
+          renderNewMetaRow();
+          tagBtn.style.background = 'var(--accent2)';
+          tagBtn.style.color = '#fff';
         }
       };
-      tagsDiv.appendChild(btn);
+      tagsDiv.appendChild(tagBtn);
     });
     document.getElementById('new-ai-section').style.display = 'block';
-  } catch(e) { showToast('AI 分析失敗'); }
+  } catch(e) { showToast('AI 分析失敗：' + e.message); }
   document.getElementById('new-ai-loading').style.display = 'none';
-  document.getElementById('new-ai-btn').disabled = false;
+  btn.innerHTML = origHTML;
+  btn.disabled = false;
 };
 
 window.saveNewArticle = async () => {
@@ -1612,21 +1707,23 @@ window.saveNewArticle = async () => {
   const saveBtn = document.getElementById('new-save-btn');
   saveBtn.disabled = true;
   saveBtn.textContent = '儲存中…';
-  const tagsRaw = document.getElementById('new-tags').value;
-  const tags = tagsRaw ? tagsRaw.split(',').map(t=>t.trim()).filter(Boolean) : [];
-  const folderId = document.getElementById('new-folder').value || null;
-  const summaryEl = document.getElementById('new-ai-summary');
-  const aiSummary = summaryEl?.textContent || '';
+  const notes = document.getElementById('new-notes').value.trim();
+  const aiSummary = document.getElementById('new-ai-summary')?.textContent || '';
   try {
-    await addDoc(collection(db, 'articles'), {
+    const docRef = await addDoc(collection(db, 'articles'), {
       uid: currentUser.uid,
-      title, body, tags, folderId, notes: '', highlight: '',
-      aiSummary, createdAt: serverTimestamp()
+      title, body, tags: [...newTags], folderId: newFolderId,
+      notes, highlight: '', aiSummary,
+      readStatus: '', favorite: false,
+      createdAt: serverTimestamp()
     });
     closeNewModal();
     showToast('文章已儲存 ✓');
+    // Auto-open the article
+    setTimeout(() => openReading(docRef.id), 300);
   } catch(e) {
     showToast('儲存失敗：' + e.message);
+    console.error('Firestore error:', e);
     saveBtn.disabled = false;
     saveBtn.textContent = '儲存';
   }
