@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>收集冊</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500&family=Noto+Sans+TC:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --surface2: #f0ede6;
+  --border: #e0dbd0;
+  --border2: #ccc7b8;
+  --text: #1a1916;
+  --text2: #6b6760;
+  --text3: #9e9a92;
+  --accent: #2d5a3d;
+  --accent-light: #e8f0eb;
+  --accent2: #c17f3a;
+  --accent2-light: #faf3e8;
+  --highlight-bg: #fff8c5;
+  --highlight-border: #e8d44d;
+  --danger: #c0392b;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.10);
+  --font-sans: 'Noto Sans TC', sans-serif;
+  --font-serif: 'Noto Serif TC', serif;
+  --transition: 0.15s ease;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { font-family: var(--font-sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 10px; }
+
+/* ── Auth Screen ── */
+#auth-screen {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+  flex-direction: column; gap: 24px;
+}
+.auth-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 48px 40px;
+  text-align: center; max-width: 360px; width: 100%;
+  box-shadow: var(--shadow-lg);
+}
+.auth-logo { font-family: var(--font-serif); font-size: 28px; font-weight: 500; color: var(--accent); margin-bottom: 8px; }
+.auth-sub { font-size: 13px; color: var(--text3); margin-bottom: 32px; }
+.google-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; padding: 12px; border-radius: var(--radius);
+  border: 1px solid var(--border2); background: var(--surface);
+  font-family: var(--font-sans); font-size: 14px; color: var(--text);
+  cursor: pointer; transition: background var(--transition);
+}
+.google-btn:hover { background: var(--surface2); }
+.google-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+/* ── Layout ── */
+#app { display: none; height: 100vh; flex-direction: column; }
+#app.visible { display: flex; }
+
+.topbar {
+  height: 48px; background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 16px; gap: 10px;
+  flex-shrink: 0; position: relative; z-index: 10;
+}
+.topbar-logo { font-family: var(--font-serif); font-size: 16px; font-weight: 500; color: var(--accent); margin-right: 4px; }
+.topbar-sep { width: 1px; height: 20px; background: var(--border); }
+
+.tag-bar {
+  flex: 1; display: flex; align-items: center; gap: 6px;
+  overflow-x: auto; padding: 0 4px;
+}
+.tag-bar::-webkit-scrollbar { height: 0; }
+.tag-pill {
+  flex-shrink: 0; padding: 4px 12px; border-radius: 20px;
+  font-size: 12px; cursor: pointer; border: 1px solid var(--border);
+  color: var(--text2); background: transparent; transition: all var(--transition);
+  white-space: nowrap; font-family: var(--font-sans);
+}
+.tag-pill:hover { border-color: var(--accent); color: var(--accent); }
+.tag-pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.topbar-actions { display: flex; align-items: center; gap: 6px; margin-left: 4px; }
+.icon-btn {
+  width: 32px; height: 32px; border-radius: var(--radius); border: 1px solid var(--border);
+  background: transparent; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text2); transition: all var(--transition); flex-shrink: 0;
+}
+.icon-btn:hover { background: var(--surface2); border-color: var(--border2); color: var(--text); }
+.icon-btn.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+.icon-btn svg { width: 16px; height: 16px; pointer-events: none; }
+
+.search-wrap {
+  display: flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border2); border-radius: var(--radius);
+  background: var(--surface2); padding: 0 10px; height: 32px;
+  overflow: hidden; max-width: 0; transition: max-width 0.25s ease, opacity 0.2s;
+  opacity: 0;
+}
+.search-wrap.open { max-width: 200px; opacity: 1; }
+.search-wrap input {
+  border: none; background: transparent; outline: none;
+  font-size: 13px; color: var(--text); width: 160px; font-family: var(--font-sans);
+}
+.search-wrap input::placeholder { color: var(--text3); }
+
+/* ── Main content ── */
+.content-area { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Folder panel ── */
+.folder-panel {
+  width: 220px; flex-shrink: 0; background: var(--surface);
+  border-right: 1px solid var(--border); display: flex; flex-direction: column;
+  overflow: hidden; transition: width 0.2s ease;
+}
+.folder-panel.hidden { width: 0; }
+.folder-panel-inner { width: 220px; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+.folder-header { padding: 12px 14px 8px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.folder-header span { font-size: 11px; letter-spacing: .06em; color: var(--text3); text-transform: uppercase; }
+.folder-add { width: 22px; height: 22px; border-radius: 4px; border: none; background: transparent; color: var(--text3); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.folder-add:hover { background: var(--surface2); color: var(--text); }
+.folder-add svg { width: 14px; height: 14px; }
+
+.folder-tree { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
+.folder-item {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+  border-radius: var(--radius); cursor: pointer; font-size: 13px; color: var(--text2);
+  transition: all var(--transition); position: relative; user-select: none;
+}
+.folder-item:hover { background: var(--surface2); color: var(--text); }
+.folder-item.active { background: var(--accent-light); color: var(--accent); font-weight: 500; }
+.folder-item.drag-over { background: var(--accent-light); border: 1px dashed var(--accent); }
+.folder-item svg { width: 14px; height: 14px; flex-shrink: 0; }
+.folder-item .count { margin-left: auto; font-size: 11px; color: var(--text3); }
+.folder-indent { padding-left: 22px; }
+.folder-back { color: var(--accent); font-size: 12px; }
+.folder-back svg { color: var(--accent); }
+
+/* ── Article list ── */
+.article-list { flex: 1; overflow-y: auto; padding: 8px; }
+.article-row {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  border-radius: var(--radius); cursor: pointer; position: relative;
+  transition: background var(--transition); border: 1px solid transparent;
+}
+.article-row:hover { background: var(--surface); border-color: var(--border); }
+.article-row.drag-dragging { opacity: 0.4; }
+.article-title { font-size: 13px; color: var(--text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.article-date { font-size: 11px; color: var(--text3); flex-shrink: 0; }
+.article-tags { display: flex; gap: 3px; flex-shrink: 0; }
+.article-tag { font-size: 10px; padding: 1px 6px; border-radius: 10px; background: var(--surface2); color: var(--text3); border: 1px solid var(--border); }
+
+/* Hover highlight tooltip */
+.highlight-tooltip {
+  position: fixed; z-index: 500; background: var(--highlight-bg);
+  border: 1px solid var(--highlight-border); border-radius: var(--radius);
+  padding: 8px 12px; font-size: 12px; color: var(--text);
+  max-width: 320px; line-height: 1.6; pointer-events: none;
+  box-shadow: var(--shadow-lg); font-family: var(--font-serif);
+  display: none;
+}
+
+/* ── Reading modal ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(247,246,242,0.95);
+  z-index: 200; display: none; flex-direction: column;
+  animation: fadeIn 0.15s ease;
+}
+.modal-overlay.open { display: flex; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.modal-topbar {
+  height: 48px; background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px; gap: 10px; flex-shrink: 0;
+}
+.modal-title { flex: 1; font-size: 14px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.modal-actions { display: flex; gap: 6px; }
+
+.modal-body { flex: 1; overflow-y: auto; display: flex; justify-content: center; padding: 40px 20px; }
+.modal-content { width: 100%; max-width: 680px; }
+
+.article-heading { font-family: var(--font-serif); font-size: 24px; font-weight: 500; line-height: 1.4; margin-bottom: 16px; color: var(--text); }
+.article-meta { display: flex; gap: 8px; align-items: center; margin-bottom: 24px; flex-wrap: wrap; }
+.meta-tag { font-size: 11px; padding: 3px 9px; border-radius: 20px; background: var(--accent-light); color: var(--accent); border: 1px solid rgba(45,90,61,0.2); }
+
+/* Article body rendered */
+.article-body-rendered {
+  font-family: var(--font-serif); font-size: 16px; line-height: 1.9;
+  color: var(--text); white-space: pre-wrap;
+}
+.article-body-rendered mark {
+  background: var(--highlight-bg); border-bottom: 2px solid var(--highlight-border);
+  padding: 0 2px; border-radius: 2px;
+}
+
+/* Markdown editor */
+.article-body-editor {
+  width: 100%; min-height: 300px; font-family: var(--font-sans); font-size: 14px;
+  line-height: 1.8; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px; resize: vertical; outline: none;
+  transition: border-color var(--transition);
+}
+.article-body-editor:focus { border-color: var(--accent); }
+
+/* Notes section */
+.notes-section { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border); }
+.notes-label { font-size: 11px; letter-spacing: .06em; color: var(--text3); text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.notes-label svg { width: 14px; height: 14px; }
+.notes-editor {
+  width: 100%; min-height: 100px; font-family: var(--font-sans); font-size: 14px;
+  line-height: 1.7; color: var(--text); background: transparent;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px 14px; resize: vertical; outline: none;
+  transition: border-color var(--transition);
+}
+.notes-editor:focus { border-color: var(--accent); }
+
+/* AI section */
+.ai-section { margin-top: 24px; padding: 14px 16px; background: var(--accent2-light); border: 1px solid rgba(193,127,58,0.2); border-radius: var(--radius-lg); }
+.ai-label { font-size: 11px; color: var(--accent2); letter-spacing: .05em; text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.ai-label svg { width: 14px; height: 14px; }
+.ai-summary { font-size: 13px; color: var(--text2); line-height: 1.7; }
+.ai-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.ai-tag-suggest {
+  font-size: 12px; padding: 3px 10px; border-radius: 20px;
+  background: var(--surface); border: 1px solid var(--accent2);
+  color: var(--accent2); cursor: pointer; transition: all var(--transition);
+}
+.ai-tag-suggest:hover { background: var(--accent2); color: #fff; }
+
+/* Highlight context menu */
+.highlight-menu {
+  position: fixed; z-index: 600; background: var(--text); color: #fff;
+  border-radius: var(--radius); padding: 6px 12px; font-size: 12px;
+  cursor: pointer; display: none; align-items: center; gap: 6px;
+  box-shadow: var(--shadow-lg);
+}
+.highlight-menu:hover { background: var(--accent); }
+.highlight-menu svg { width: 13px; height: 13px; }
+
+/* ── New Article modal ── */
+.new-modal {
+  position: fixed; inset: 0; z-index: 300; background: rgba(26,25,22,0.5);
+  display: none; align-items: center; justify-content: center;
+}
+.new-modal.open { display: flex; }
+.new-card {
+  background: var(--surface); border-radius: var(--radius-lg);
+  padding: 28px 28px 24px; width: 600px; max-width: 95vw;
+  box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 14px;
+  max-height: 90vh; overflow-y: auto;
+}
+.new-card h2 { font-family: var(--font-serif); font-size: 18px; font-weight: 500; }
+.field-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
+.field-input {
+  width: 100%; padding: 9px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius); font-family: var(--font-sans); font-size: 14px;
+  color: var(--text); background: var(--surface); outline: none;
+  transition: border-color var(--transition);
+}
+.field-input:focus { border-color: var(--accent); }
+textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
+.new-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.btn {
+  padding: 8px 18px; border-radius: var(--radius); font-size: 14px;
+  font-family: var(--font-sans); cursor: pointer; border: 1px solid var(--border);
+  background: transparent; color: var(--text2); transition: all var(--transition);
+}
+.btn:hover { background: var(--surface2); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { background: #234a31; border-color: #234a31; }
+.btn-danger { color: var(--danger); border-color: var(--danger); }
+.btn-danger:hover { background: #fdf0ef; }
+.ai-loading { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text3); }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--border2); border-top-color: var(--accent2); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Folder new modal ── */
+.folder-modal {
+  position: fixed; inset: 0; z-index: 400; background: rgba(26,25,22,0.5);
+  display: none; align-items: center; justify-content: center;
+}
+.folder-modal.open { display: flex; }
+.folder-card { background: var(--surface); border-radius: var(--radius-lg); padding: 24px; width: 320px; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 14px; }
+.folder-card h3 { font-size: 15px; font-weight: 500; }
+
+/* ── API Key modal ── */
+.apikey-modal {
+  position: fixed; inset: 0; z-index: 500; background: rgba(26,25,22,0.6);
+  display: none; align-items: center; justify-content: center;
+}
+.apikey-modal.open { display: flex; }
+.apikey-card {
+  background: var(--surface); border-radius: var(--radius-lg);
+  padding: 28px; width: 400px; max-width: 95vw;
+  box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 16px;
+}
+.apikey-card h3 { font-family: var(--font-serif); font-size: 17px; font-weight: 500; }
+.apikey-card p { font-size: 13px; color: var(--text2); line-height: 1.6; }
+.apikey-card a { color: var(--accent); text-decoration: none; }
+.apikey-card a:hover { text-decoration: underline; }
+.apikey-input-wrap { position: relative; display: flex; align-items: center; }
+.apikey-input-wrap input { padding-right: 36px; }
+.apikey-eye {
+  position: absolute; right: 10px; background: none; border: none;
+  cursor: pointer; color: var(--text3); display: flex; align-items: center;
+}
+.apikey-eye:hover { color: var(--text); }
+.apikey-eye svg { width: 16px; height: 16px; }
+.apikey-status { font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.apikey-status.ok { color: var(--accent); }
+.apikey-status.err { color: var(--danger); }
+
+/* toast */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(40px);
+  background: var(--text); color: #fff; padding: 9px 18px; border-radius: 20px;
+  font-size: 13px; z-index: 900; transition: all 0.25s ease; opacity: 0; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* User avatar */
+.user-avatar {
+  width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+  border: 1.5px solid var(--border); object-fit: cover;
+  flex-shrink: 0;
+}
+.user-initials {
+  width: 28px; height: 28px; border-radius: 50%; background: var(--accent);
+  color: #fff; font-size: 12px; font-weight: 500; display: flex;
+  align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
+}
+
+/* empty state */
+.empty { text-align: center; padding: 60px 20px; color: var(--text3); }
+.empty svg { width: 40px; height: 40px; margin-bottom: 12px; opacity: .4; }
+.empty p { font-size: 14px; }
+
+/* folder toggle btn */
+.folder-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<!-- Auth Screen -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">收集冊</div>
+    <div class="auth-sub">知乎好文，一鍵收藏</div>
+    <button class="google-btn" onclick="signInWithGoogle()">
+      <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      使用 Google 帳號登入
+    </button>
+  </div>
+</div>
+
+<!-- Main App -->
+<div id="app">
+  <!-- Topbar -->
+  <div class="topbar">
+    <span class="topbar-logo">收集冊</span>
+    <div class="topbar-sep"></div>
+
+    <!-- Folder toggle -->
+    <button class="icon-btn" id="folder-toggle-btn" title="資料夾" onclick="toggleFolderPanel()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+    </button>
+
+    <div class="topbar-sep"></div>
+
+    <!-- Tag pills -->
+    <div class="tag-bar" id="tag-bar">
+      <button class="tag-pill active" data-tag="__all__" onclick="filterTag(this)">全部</button>
+    </div>
+
+    <!-- Actions -->
+    <div class="topbar-actions">
+      <!-- Search -->
+      <div class="search-wrap" id="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:14px;height:14px;color:var(--text3)"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="search-input" placeholder="搜尋標題、內文…" oninput="filterArticles()" />
+      </div>
+      <button class="icon-btn" id="search-btn" title="搜尋" onclick="toggleSearch()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      </button>
+      <button class="icon-btn btn-primary" title="新增文章" onclick="openNewModal()" style="background:var(--accent);border-color:var(--accent);color:#fff">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button class="icon-btn" title="Gemini API Key 設定" onclick="openApikeyModal(false)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <div id="user-avatar-wrap"></div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="content-area">
+    <!-- Folder panel -->
+    <div class="folder-panel hidden" id="folder-panel">
+      <div class="folder-panel-inner">
+        <div class="folder-header">
+          <span>資料夾</span>
+          <button class="folder-add" title="新增資料夾" onclick="openFolderModal()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+        <div class="folder-tree" id="folder-tree"></div>
+      </div>
+    </div>
+
+    <!-- Article list -->
+    <div class="article-list" id="article-list"></div>
+  </div>
+</div>
+
+<!-- Reading modal -->
+<div class="modal-overlay" id="reading-modal">
+  <div class="modal-topbar">
+    <button class="icon-btn" onclick="closeReading()" title="關閉">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
+    <span class="modal-title" id="modal-title-bar"></span>
+    <div class="modal-actions">
+      <button class="icon-btn" id="md-toggle-btn" title="Markdown 模式" onclick="toggleMdMode()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15V9l3 3 3-3v6M17 9v6"/></svg>
+      </button>
+      <button class="icon-btn" id="ai-btn" title="AI 分析" onclick="runAiAnalysis()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="M12 8v4l3 3"/></svg>
+      </button>
+      <button class="icon-btn btn-danger" title="刪除文章" onclick="deleteCurrentArticle()" style="color:var(--danger)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="modal-body" id="modal-body">
+    <div class="modal-content" id="modal-content"></div>
+  </div>
+</div>
+
+<!-- Highlight context menu -->
+<div class="highlight-menu" id="highlight-menu" onclick="applyHighlight()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5l4 4L7 21l-4 1 1-4L16.5 3.5z"/></svg>
+  設為 Highlight
+</div>
+
+<!-- New Article modal -->
+<div class="new-modal" id="new-modal">
+  <div class="new-card">
+    <h2>新增文章</h2>
+    <div>
+      <div class="field-label">標題</div>
+      <input class="field-input" id="new-title" placeholder="文章標題" />
+    </div>
+    <div>
+      <div class="field-label">內文（貼上原文）</div>
+      <textarea class="field-input" id="new-body" placeholder="貼上文章全文…"></textarea>
+    </div>
+    <div>
+      <div class="field-label">標籤（逗號分隔）</div>
+      <input class="field-input" id="new-tags" placeholder="心理學, 認知偏誤" />
+    </div>
+    <div>
+      <div class="field-label">資料夾</div>
+      <select class="field-input" id="new-folder"></select>
+    </div>
+    <div id="new-ai-section" style="display:none">
+      <div class="ai-section">
+        <div class="ai-label">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="m9 12 2 2 4-4"/></svg>
+          AI 建議
+        </div>
+        <div class="ai-summary" id="new-ai-summary"></div>
+        <div class="ai-tags" id="new-ai-tags"></div>
+      </div>
+    </div>
+    <div id="new-ai-loading" style="display:none" class="ai-loading">
+      <div class="spinner"></div> AI 分析中…
+    </div>
+    <div class="new-actions">
+      <button class="btn" onclick="runNewAi()" id="new-ai-btn">✦ AI 分析</button>
+      <button class="btn" onclick="closeNewModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveNewArticle()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Folder modal -->
+<div class="folder-modal" id="folder-modal">
+  <div class="folder-card">
+    <h3>新增資料夾</h3>
+    <div>
+      <div class="field-label">名稱</div>
+      <input class="field-input" id="folder-name-input" placeholder="資料夾名稱" />
+    </div>
+    <div>
+      <div class="field-label">上層資料夾（選填）</div>
+      <select class="field-input" id="folder-parent-select"><option value="">根目錄</option></select>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="closeFolderModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveFolderModal()">建立</button>
+    </div>
+  </div>
+</div>
+
+<!-- Highlight tooltip -->
+<div class="highlight-tooltip" id="highlight-tooltip"></div>
+
+<!-- API Key modal -->
+<div class="apikey-modal" id="apikey-modal">
+  <div class="apikey-card">
+    <h3>設定 Gemini API Key</h3>
+    <p>Key 只會存在你的瀏覽器本地（localStorage），不會上傳到任何伺服器。<br>
+    還沒有 Key？<a href="https://aistudio.google.com/app/apikey" target="_blank">前往 Google AI Studio 申請</a></p>
+    <div>
+      <div class="field-label">API Key</div>
+      <div class="apikey-input-wrap">
+        <input class="field-input" id="apikey-input" type="password" placeholder="貼上你的 Gemini API Key…" />
+        <button class="apikey-eye" onclick="toggleKeyVisibility()" title="顯示／隱藏">
+          <svg id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="apikey-status" class="apikey-status" style="display:none"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" id="apikey-skip-btn" onclick="closeApikeyModal(false)">稍後再說</button>
+      <button class="btn" onclick="testGeminiKey()">測試連線</button>
+      <button class="btn btn-primary" onclick="saveApiKey()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Firebase + App Script -->
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, getDocs, onSnapshot, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDVJPG00SlAS9Vku4MuJYHq2reB2ENRClE",
+  authDomain: "thecompass-28808.firebaseapp.com",
+  projectId: "thecompass-28808",
+  storageBucket: "thecompass-28808.firebasestorage.app",
+  messagingSenderId: "130679459961",
+  appId: "1:130679459961:web:6a2f0fd8e6f4254864c4a8"
+};
+
+const GEMINI_MODEL = 'gemini-2.0-flash';
+function getGeminiUrl() {
+  const key = localStorage.getItem('gemini_key');
+  if (!key) return null;
+  return `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
+}
+
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+
+// ── State ──
+let currentUser = null;
+let articles = [];
+let folders = [];
+let currentFolderId = null; // null = root view (all)
+let currentFolderPath = []; // breadcrumb [{id, name}]
+let activeTag = '__all__';
+let currentArticleId = null;
+let mdMode = false;
+let searchOpen = false;
+let saveTimeout = null;
+let selectionRange = null;
+
+// ── Auth ──
+window.signInWithGoogle = async () => {
+  const provider = new GoogleAuthProvider();
+  try { await signInWithPopup(auth, provider); } catch(e) { showToast('登入失敗：' + e.message); }
+};
+
+onAuthStateChanged(auth, user => {
+  if (user) {
+    currentUser = user;
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app').classList.add('visible');
+    renderUserAvatar();
+    // Check if Gemini key is set
+    if (!localStorage.getItem('gemini_key')) {
+      openApikeyModal(true); // first time, can't skip
+    }
+    subscribeData();
+  } else {
+    currentUser = null;
+    document.getElementById('auth-screen').style.display = 'flex';
+    document.getElementById('app').classList.remove('visible');
+  }
+});
+
+function renderUserAvatar() {
+  const wrap = document.getElementById('user-avatar-wrap');
+  if (currentUser.photoURL) {
+    wrap.innerHTML = `<img class="user-avatar" src="${currentUser.photoURL}" title="${currentUser.displayName}\n點擊登出" onclick="doSignOut()">`;
+  } else {
+    const initials = (currentUser.displayName || 'U').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+    wrap.innerHTML = `<div class="user-initials" title="${currentUser.displayName}\n點擊登出" onclick="doSignOut()">${initials}</div>`;
+  }
+}
+
+window.doSignOut = () => { if(confirm('確定要登出嗎？')) signOut(auth); };
+
+// ── Firestore Subscribe ──
+function subscribeData() {
+  const uid = currentUser.uid;
+  // Articles
+  onSnapshot(query(collection(db, 'articles'), where('uid','==',uid)), snap => {
+    articles = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    articles.sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
+    renderTagBar();
+    renderArticleList();
+  });
+  // Folders
+  onSnapshot(query(collection(db, 'folders'), where('uid','==',uid)), snap => {
+    folders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderFolderTree();
+    renderFolderSelects();
+  });
+}
+
+// ── Tag bar ──
+function renderTagBar() {
+  const allTags = new Set();
+  articles.forEach(a => (a.tags||[]).forEach(t => allTags.add(t)));
+  const bar = document.getElementById('tag-bar');
+  const prev = activeTag;
+  bar.innerHTML = '';
+  const allBtn = document.createElement('button');
+  allBtn.className = 'tag-pill' + (prev==='__all__' ? ' active':'');
+  allBtn.dataset.tag = '__all__';
+  allBtn.textContent = '全部';
+  allBtn.onclick = () => filterTag(allBtn);
+  bar.appendChild(allBtn);
+  [...allTags].sort().forEach(tag => {
+    const btn = document.createElement('button');
+    btn.className = 'tag-pill' + (prev===tag ? ' active':'');
+    btn.dataset.tag = tag;
+    btn.textContent = tag;
+    btn.onclick = () => filterTag(btn);
+    bar.appendChild(btn);
+  });
+}
+
+window.filterTag = (el) => {
+  document.querySelectorAll('.tag-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  activeTag = el.dataset.tag;
+  renderArticleList();
+};
+
+// ── Folder panel ──
+window.toggleFolderPanel = () => {
+  const panel = document.getElementById('folder-panel');
+  const btn = document.getElementById('folder-toggle-btn');
+  panel.classList.toggle('hidden');
+  btn.classList.toggle('active');
+};
+
+function renderFolderTree() {
+  const tree = document.getElementById('folder-tree');
+  tree.innerHTML = '';
+
+  // All articles item
+  const allItem = document.createElement('div');
+  allItem.className = 'folder-item' + (!currentFolderId ? ' active' : '');
+  allItem.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> 全部文章 <span class="count">${articles.length}</span>`;
+  allItem.onclick = () => { currentFolderId = null; currentFolderPath = []; renderFolderTree(); renderArticleList(); };
+  tree.appendChild(allItem);
+
+  // Back button if inside folder
+  if (currentFolderPath.length > 0) {
+    const backItem = document.createElement('div');
+    backItem.className = 'folder-item folder-back';
+    const parentId = currentFolderPath.length > 1 ? currentFolderPath[currentFolderPath.length-2].id : null;
+    backItem.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg> 上一層`;
+    backItem.onclick = () => {
+      currentFolderPath.pop();
+      currentFolderId = parentId;
+      renderFolderTree();
+      renderArticleList();
+    };
+    tree.appendChild(backItem);
+  }
+
+  // Current path breadcrumb
+  if (currentFolderPath.length > 0) {
+    const crumb = document.createElement('div');
+    crumb.style.cssText = 'padding:4px 8px 2px;font-size:11px;color:var(--text3);';
+    crumb.textContent = currentFolderPath.map(p=>p.name).join(' › ');
+    tree.appendChild(crumb);
+  }
+
+  // Show children of current folder
+  const parentId = currentFolderId;
+  const children = folders.filter(f => (f.parentId||null) === parentId);
+  children.forEach(folder => {
+    const count = articles.filter(a => a.folderId === folder.id).length;
+    const item = document.createElement('div');
+    item.className = 'folder-item' + (currentFolderId===folder.id ? ' active':'');
+    item.draggable = false;
+    item.dataset.folderId = folder.id;
+    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(folder.name)} <span class="count">${count}</span>`;
+    item.onclick = () => {
+      currentFolderId = folder.id;
+      currentFolderPath = [...currentFolderPath, {id: folder.id, name: folder.name}];
+      renderFolderTree();
+      renderArticleList();
+    };
+    // Drag-over for dropping articles
+    item.addEventListener('dragover', e => { e.preventDefault(); item.classList.add('drag-over'); });
+    item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+    item.addEventListener('drop', async e => {
+      e.preventDefault();
+      item.classList.remove('drag-over');
+      const artId = e.dataTransfer.getData('articleId');
+      if (artId) {
+        await updateDoc(doc(db, 'articles', artId), { folderId: folder.id });
+        showToast(`已移到「${folder.name}」`);
+      }
+    });
+    tree.appendChild(item);
+  });
+}
+
+function renderFolderSelects() {
+  // For new article modal
+  const sel = document.getElementById('new-folder');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">無資料夾</option>';
+  folders.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f.id;
+    opt.textContent = f.name;
+    if (currentFolderId === f.id) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  // For folder parent select
+  const psel = document.getElementById('folder-parent-select');
+  if (!psel) return;
+  psel.innerHTML = '<option value="">根目錄</option>';
+  folders.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f.id;
+    opt.textContent = f.name;
+    psel.appendChild(opt);
+  });
+}
+
+// ── Article list ──
+function getFilteredArticles() {
+  let list = articles;
+  // folder filter
+  if (currentFolderId) list = list.filter(a => a.folderId === currentFolderId);
+  // tag filter
+  if (activeTag !== '__all__') list = list.filter(a => (a.tags||[]).includes(activeTag));
+  // search
+  const q = document.getElementById('search-input')?.value.trim().toLowerCase();
+  if (q) list = list.filter(a => a.title?.toLowerCase().includes(q) || a.body?.toLowerCase().includes(q));
+  return list;
+}
+
+function renderArticleList() {
+  const list = document.getElementById('article-list');
+  const filtered = getFilteredArticles();
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>還沒有文章</p></div>`;
+    return;
+  }
+  list.innerHTML = '';
+  filtered.forEach(art => {
+    const row = document.createElement('div');
+    row.className = 'article-row';
+    row.draggable = true;
+    row.dataset.id = art.id;
+    const tagsHtml = (art.tags||[]).slice(0,3).map(t=>`<span class="article-tag">${escHtml(t)}</span>`).join('');
+    const dateStr = art.createdAt ? formatDate(art.createdAt.seconds*1000) : '';
+    row.innerHTML = `
+      <span class="article-title">${escHtml(art.title||'未命名')}</span>
+      <div class="article-tags">${tagsHtml}</div>
+      <span class="article-date">${dateStr}</span>
+    `;
+    row.onclick = () => openReading(art.id);
+    row.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('articleId', art.id);
+      row.classList.add('drag-dragging');
+    });
+    row.addEventListener('dragend', () => row.classList.remove('drag-dragging'));
+    // Hover highlight tooltip
+    if (art.highlight) {
+      row.addEventListener('mouseenter', e => showHighlightTooltip(e, art.highlight));
+      row.addEventListener('mousemove', e => moveHighlightTooltip(e));
+      row.addEventListener('mouseleave', hideHighlightTooltip);
+    }
+    list.appendChild(row);
+  });
+}
+
+window.filterArticles = () => renderArticleList();
+
+// ── Highlight tooltip ──
+function showHighlightTooltip(e, text) {
+  const tip = document.getElementById('highlight-tooltip');
+  tip.textContent = `"${text}"`;
+  tip.style.display = 'block';
+  moveHighlightTooltip(e);
+}
+function moveHighlightTooltip(e) {
+  const tip = document.getElementById('highlight-tooltip');
+  tip.style.left = (e.clientX + 14) + 'px';
+  tip.style.top = (e.clientY - 10) + 'px';
+}
+function hideHighlightTooltip() {
+  document.getElementById('highlight-tooltip').style.display = 'none';
+}
+
+// ── Reading modal ──
+window.openReading = (id) => {
+  const art = articles.find(a => a.id === id);
+  if (!art) return;
+  currentArticleId = id;
+  mdMode = false;
+  document.getElementById('reading-modal').classList.add('open');
+  document.getElementById('modal-title-bar').textContent = art.title||'';
+  document.getElementById('md-toggle-btn').classList.remove('active');
+  renderModalContent(art);
+};
+
+window.closeReading = () => {
+  document.getElementById('reading-modal').classList.remove('open');
+  currentArticleId = null;
+  // hide highlight menu
+  document.getElementById('highlight-menu').style.display = 'none';
+};
+
+function renderModalContent(art) {
+  const content = document.getElementById('modal-content');
+  const tagsHtml = (art.tags||[]).map(t=>`<span class="meta-tag">${escHtml(t)}</span>`).join('');
+  let bodyHtml = '';
+  if (mdMode) {
+    bodyHtml = `<textarea class="article-body-editor" id="body-editor" oninput="scheduleBodySave()">${escHtml(art.body||'')}</textarea>`;
+  } else {
+    const rendered = renderBody(art.body||'', art.highlight||'');
+    bodyHtml = `<div class="article-body-rendered" id="body-rendered">${rendered}</div>`;
+  }
+  const aiHtml = art.aiSummary ? `<div class="ai-section" style="margin-top:24px"><div class="ai-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="m9 12 2 2 4-4"/></svg> AI 摘要</div><div class="ai-summary">${escHtml(art.aiSummary)}</div></div>` : '';
+  content.innerHTML = `
+    <div class="article-heading">${escHtml(art.title||'未命名')}</div>
+    <div class="article-meta">${tagsHtml}</div>
+    ${bodyHtml}
+    ${aiHtml}
+    <div class="notes-section">
+      <div class="notes-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5l4 4L7 21l-4 1 1-4z"/></svg> 我的筆記</div>
+      <textarea class="notes-editor" id="notes-editor" placeholder="記下你的想法…" oninput="scheduleNotesSave()">${escHtml(art.notes||'')}</textarea>
+    </div>
+  `;
+}
+
+function renderBody(body, highlight) {
+  let escaped = escHtml(body);
+  if (highlight) {
+    const hEsc = escHtml(highlight);
+    escaped = escaped.replace(hEsc, `<mark>${hEsc}</mark>`);
+  }
+  return escaped;
+}
+
+window.toggleMdMode = () => {
+  const art = articles.find(a => a.id === currentArticleId);
+  if (!art) return;
+  if (mdMode) {
+    // save before switching
+    const editor = document.getElementById('body-editor');
+    if (editor) saveBodyNow(editor.value);
+  }
+  mdMode = !mdMode;
+  document.getElementById('md-toggle-btn').classList.toggle('active', mdMode);
+  renderModalContent(art);
+};
+
+window.scheduleBodySave = () => {
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    const editor = document.getElementById('body-editor');
+    if (editor) saveBodyNow(editor.value);
+  }, 800);
+};
+
+async function saveBodyNow(val) {
+  if (!currentArticleId) return;
+  await updateDoc(doc(db, 'articles', currentArticleId), { body: val });
+}
+
+window.scheduleNotesSave = () => {
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(async () => {
+    const editor = document.getElementById('notes-editor');
+    if (editor && currentArticleId) {
+      await updateDoc(doc(db, 'articles', currentArticleId), { notes: editor.value });
+    }
+  }, 800);
+};
+
+// ── Highlight selection ──
+document.addEventListener('mouseup', (e) => {
+  const modal = document.getElementById('reading-modal');
+  if (!modal.classList.contains('open')) return;
+  if (mdMode) return;
+  const sel = window.getSelection();
+  const text = sel?.toString().trim();
+  if (!text || text.length < 3) {
+    document.getElementById('highlight-menu').style.display = 'none';
+    return;
+  }
+  selectionRange = sel.getRangeAt(0);
+  const rect = sel.getRangeAt(0).getBoundingClientRect();
+  const menu = document.getElementById('highlight-menu');
+  menu.style.display = 'flex';
+  menu.style.left = rect.left + rect.width/2 - 60 + 'px';
+  menu.style.top = rect.top - 40 + 'px';
+});
+
+window.applyHighlight = async () => {
+  const sel = window.getSelection();
+  const text = sel?.toString().trim();
+  if (!text || !currentArticleId) return;
+  await updateDoc(doc(db, 'articles', currentArticleId), { highlight: text });
+  document.getElementById('highlight-menu').style.display = 'none';
+  const art = articles.find(a => a.id === currentArticleId);
+  if (art) { art.highlight = text; renderModalContent(art); }
+  showToast('Highlight 已儲存');
+};
+
+// ── Delete ──
+window.deleteCurrentArticle = async () => {
+  if (!currentArticleId) return;
+  const art = articles.find(a => a.id === currentArticleId);
+  if (!confirm(`確定刪除「${art?.title||'文章'}」？`)) return;
+  await deleteDoc(doc(db, 'articles', currentArticleId));
+  closeReading();
+  showToast('已刪除');
+};
+
+// ── AI in reading ──
+window.runAiAnalysis = async () => {
+  const art = articles.find(a => a.id === currentArticleId);
+  if (!art) return;
+  const btn = document.getElementById('ai-btn');
+  btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--accent2);border-radius:50%;animation:spin .8s linear infinite"></div>';
+  btn.disabled = true;
+  try {
+    const result = await callGemini(`以下是一篇文章，請用繁體中文：1) 寫一段3句話以內的摘要；2) 建議3-5個標籤（用逗號分隔）。
+格式嚴格如下（不要其他文字）：
+摘要：[摘要]
+標籤：[標籤1, 標籤2, ...]
+
+文章標題：${art.title}
+文章內容：${(art.body||'').slice(0,3000)}`);
+    const summaryMatch = result.match(/摘要：(.+)/);
+    const tagsMatch = result.match(/標籤：(.+)/);
+    const summary = summaryMatch ? summaryMatch[1].trim() : '';
+    const tags = tagsMatch ? tagsMatch[1].split(',').map(t=>t.trim()).filter(Boolean) : [];
+    await updateDoc(doc(db, 'articles', currentArticleId), { aiSummary: summary, tags });
+    showToast('AI 分析完成');
+  } catch(e) { showToast('AI 分析失敗：' + e.message); }
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="M12 8v4l3 3"/></svg>`;
+  btn.disabled = false;
+};
+
+// ── New article modal ──
+window.openNewModal = () => {
+  document.getElementById('new-title').value = '';
+  document.getElementById('new-body').value = '';
+  document.getElementById('new-tags').value = '';
+  document.getElementById('new-ai-section').style.display = 'none';
+  document.getElementById('new-ai-loading').style.display = 'none';
+  renderFolderSelects();
+  document.getElementById('new-modal').classList.add('open');
+  setTimeout(() => document.getElementById('new-title').focus(), 50);
+};
+window.closeNewModal = () => document.getElementById('new-modal').classList.remove('open');
+
+window.runNewAi = async () => {
+  const title = document.getElementById('new-title').value.trim();
+  const body = document.getElementById('new-body').value.trim();
+  if (!title && !body) { showToast('請先填寫標題或內文'); return; }
+  document.getElementById('new-ai-loading').style.display = 'flex';
+  document.getElementById('new-ai-section').style.display = 'none';
+  document.getElementById('new-ai-btn').disabled = true;
+  try {
+    const result = await callGemini(`以下是一篇文章，請用繁體中文：1) 寫一段3句話以內的摘要；2) 建議3-5個標籤。
+格式嚴格如下（不要其他文字）：
+摘要：[摘要]
+標籤：[標籤1, 標籤2, ...]
+
+文章標題：${title}
+文章內容：${body.slice(0,3000)}`);
+    const summaryMatch = result.match(/摘要：(.+)/);
+    const tagsMatch = result.match(/標籤：(.+)/);
+    const summary = summaryMatch ? summaryMatch[1].trim() : '';
+    const suggestedTags = tagsMatch ? tagsMatch[1].split(',').map(t=>t.trim()).filter(Boolean) : [];
+    document.getElementById('new-ai-summary').textContent = summary;
+    const tagsDiv = document.getElementById('new-ai-tags');
+    tagsDiv.innerHTML = '';
+    suggestedTags.forEach(tag => {
+      const btn = document.createElement('button');
+      btn.className = 'ai-tag-suggest';
+      btn.textContent = tag;
+      btn.onclick = () => {
+        const cur = document.getElementById('new-tags').value.trim();
+        const existing = cur ? cur.split(',').map(t=>t.trim()) : [];
+        if (!existing.includes(tag)) {
+          document.getElementById('new-tags').value = [...existing, tag].join(', ');
+          btn.style.background = 'var(--accent2)';
+          btn.style.color = '#fff';
+        }
+      };
+      tagsDiv.appendChild(btn);
+    });
+    document.getElementById('new-ai-section').style.display = 'block';
+  } catch(e) { showToast('AI 分析失敗'); }
+  document.getElementById('new-ai-loading').style.display = 'none';
+  document.getElementById('new-ai-btn').disabled = false;
+};
+
+window.saveNewArticle = async () => {
+  const title = document.getElementById('new-title').value.trim();
+  const body = document.getElementById('new-body').value.trim();
+  if (!title) { showToast('請填寫標題'); return; }
+  const tagsRaw = document.getElementById('new-tags').value;
+  const tags = tagsRaw ? tagsRaw.split(',').map(t=>t.trim()).filter(Boolean) : [];
+  const folderId = document.getElementById('new-folder').value || null;
+  const summaryEl = document.getElementById('new-ai-summary');
+  const aiSummary = summaryEl?.textContent || '';
+  await addDoc(collection(db, 'articles'), {
+    uid: currentUser.uid,
+    title, body, tags, folderId, notes: '', highlight: '',
+    aiSummary, createdAt: serverTimestamp()
+  });
+  closeNewModal();
+  showToast('文章已儲存');
+};
+
+// ── Folder modal ──
+window.openFolderModal = () => {
+  document.getElementById('folder-name-input').value = '';
+  renderFolderSelects();
+  document.getElementById('folder-modal').classList.add('open');
+  setTimeout(() => document.getElementById('folder-name-input').focus(), 50);
+};
+window.closeFolderModal = () => document.getElementById('folder-modal').classList.remove('open');
+
+window.saveFolderModal = async () => {
+  const name = document.getElementById('folder-name-input').value.trim();
+  if (!name) { showToast('請填寫資料夾名稱'); return; }
+  const parentId = document.getElementById('folder-parent-select').value || null;
+  await addDoc(collection(db, 'folders'), { uid: currentUser.uid, name, parentId });
+  closeFolderModal();
+  showToast(`資料夾「${name}」已建立`);
+};
+
+// ── Search ──
+window.toggleSearch = () => {
+  searchOpen = !searchOpen;
+  const wrap = document.getElementById('search-wrap');
+  const btn = document.getElementById('search-btn');
+  wrap.classList.toggle('open', searchOpen);
+  btn.classList.toggle('active', searchOpen);
+  if (searchOpen) setTimeout(() => document.getElementById('search-input').focus(), 250);
+  else { document.getElementById('search-input').value = ''; renderArticleList(); }
+};
+
+// ── Gemini ──
+async function callGemini(prompt) {
+  const url = getGeminiUrl();
+  if (!url) {
+    openApikeyModal(false);
+    throw new Error('尚未設定 Gemini API Key');
+  }
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+  });
+  if (!res.ok) {
+    if (res.status === 400 || res.status === 403) {
+      openApikeyModal(false);
+      throw new Error('API Key 無效，請重新設定');
+    }
+    throw new Error('HTTP ' + res.status);
+  }
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+// ── API Key modal ──
+let apikeyFirstTime = false;
+function openApikeyModal(firstTime) {
+  apikeyFirstTime = firstTime;
+  const modal = document.getElementById('apikey-modal');
+  const skipBtn = document.getElementById('apikey-skip-btn');
+  const input = document.getElementById('apikey-input');
+  // pre-fill if exists
+  input.value = localStorage.getItem('gemini_key') || '';
+  document.getElementById('apikey-status').style.display = 'none';
+  skipBtn.style.display = firstTime ? 'none' : '';
+  modal.classList.add('open');
+  setTimeout(() => input.focus(), 50);
+}
+window.closeApikeyModal = (saved) => {
+  document.getElementById('apikey-modal').classList.remove('open');
+  if (saved) showToast('API Key 已儲存');
+};
+window.saveApiKey = () => {
+  const val = document.getElementById('apikey-input').value.trim();
+  if (!val) { showToast('請輸入 API Key'); return; }
+  localStorage.setItem('gemini_key', val);
+  closeApikeyModal(true);
+};
+window.testGeminiKey = async () => {
+  const val = document.getElementById('apikey-input').value.trim();
+  if (!val) { showToast('請先輸入 Key'); return; }
+  const status = document.getElementById('apikey-status');
+  status.style.display = 'flex';
+  status.className = 'apikey-status';
+  status.innerHTML = '<div class="spinner"></div> 測試中…';
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${val}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: '回覆「ok」' }] }] })
+    });
+    if (res.ok) {
+      status.className = 'apikey-status ok';
+      status.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M20 6L9 17l-5-5"/></svg> 連線成功！';
+    } else {
+      status.className = 'apikey-status err';
+      status.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg> Key 無效（HTTP ' + res.status + '）';
+    }
+  } catch(e) {
+    status.className = 'apikey-status err';
+    status.innerHTML = '連線失敗：' + e.message;
+  }
+};
+window.toggleKeyVisibility = () => {
+  const input = document.getElementById('apikey-input');
+  input.type = input.type === 'password' ? 'text' : 'password';
+};
+
+// Expose openApikeyModal for settings button
+window.openApikeyModal = openApikeyModal;
+
+// ── Helpers ──
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function formatDate(ms) {
+  const d = new Date(ms);
+  const now = Date.now();
+  const diff = now - ms;
+  if (diff < 86400000) return '今天';
+  if (diff < 172800000) return '昨天';
+  if (diff < 604800000) return Math.floor(diff/86400000) + '天前';
+  return `${d.getMonth()+1}/${d.getDate()}`;
+}
+window.showToast = (msg) => {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+};
+
+// Close modals on backdrop click
+document.getElementById('new-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeNewModal(); });
+document.getElementById('folder-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeFolderModal(); });
+
+// ESC key
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('reading-modal').classList.contains('open')) closeReading();
+    else if (document.getElementById('new-modal').classList.contains('open')) closeNewModal();
+    else if (document.getElementById('folder-modal').classList.contains('open')) closeFolderModal();
+    else if (searchOpen) toggleSearch();
+  }
+});
+</script>
+</body>
+</html>
