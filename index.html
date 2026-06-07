@@ -249,19 +249,34 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .highlight-menu:hover { background: var(--accent); }
 .highlight-menu svg { width: 13px; height: 13px; }
 
-/* ── New Article modal ── */
+/* ── New Article modal (full page) ── */
 .new-modal {
-  position: fixed; inset: 0; z-index: 300; background: rgba(26,25,22,0.5);
-  display: none; align-items: center; justify-content: center;
+  position: fixed; inset: 0; z-index: 300; background: var(--bg);
+  display: none; flex-direction: column; animation: fadeIn 0.12s ease;
 }
 .new-modal.open { display: flex; }
-.new-card {
-  background: var(--surface); border-radius: var(--radius-lg);
-  padding: 28px 28px 24px; width: 600px; max-width: 95vw;
-  box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 14px;
-  max-height: 90vh; overflow-y: auto;
+.new-modal-topbar {
+  height: 48px; background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px; gap: 12px; flex-shrink: 0;
 }
-.new-card h2 { font-family: var(--font-serif); font-size: 18px; font-weight: 500; }
+.new-modal-topbar h2 { font-family: var(--font-serif); font-size: 16px; font-weight: 500; flex: 1; }
+.new-card {
+  flex: 1; overflow-y: auto; display: flex; justify-content: center; padding: 32px 20px;
+}
+.new-card-inner {
+  width: 100%; max-width: 720px; display: flex; flex-direction: column; gap: 18px;
+}
+.meta-toggle {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 12px; color: var(--text3); user-select: none; width: fit-content;
+  padding: 4px 0;
+}
+.meta-toggle:hover { color: var(--text2); }
+.meta-toggle svg { width: 13px; height: 13px; transition: transform 0.15s; flex-shrink: 0; }
+.meta-toggle.open svg { transform: rotate(180deg); }
+.meta-panel { display: none; flex-direction: column; gap: 12px; padding-top: 4px; }
+.meta-panel.open { display: flex; }
+.meta-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
 .field-input {
   width: 100%; padding: 9px 12px; border: 1px solid var(--border);
@@ -349,6 +364,203 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 
 /* folder toggle btn */
 .folder-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+
+/* ── Reading Page (full redesign) ── */
+.reading-toolbar {
+  height: 44px; background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 12px; gap: 4px;
+  flex-shrink: 0; position: relative; z-index: 10; transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.reading-toolbar.collapsed { transform: translateY(-44px); opacity: 0; pointer-events: none; }
+.tb-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; flex-shrink: 0; }
+.tb-spacer { flex: 1; }
+.tb-btn {
+  height: 30px; min-width: 30px; padding: 0 7px; border-radius: var(--radius);
+  border: 1px solid transparent; background: transparent;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  cursor: pointer; color: var(--text2); font-size: 12px; font-family: var(--font-sans);
+  transition: all var(--transition); flex-shrink: 0; white-space: nowrap;
+}
+.tb-btn:hover { background: var(--surface2); border-color: var(--border); }
+.tb-btn.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+.tb-btn svg { width: 14px; height: 14px; pointer-events: none; flex-shrink: 0; }
+/* read-status button states */
+.tb-btn.read-todo { color: var(--text3); }
+.tb-btn.read-plan { color: #2d7a4f; background: #e6f4ec; border-color: #a8d8b8; }
+.tb-btn.read-done { color: #b85c8a; background: #fce8f3; border-color: #e8b8d4; }
+.tb-btn.fav-on { color: #c0392b; background: #fdf0ef; border-color: #f0b8b3; }
+
+/* Article title bar */
+.reading-title-bar {
+  padding: 16px 24px 12px; background: var(--surface);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+.reading-title-bar.collapsed { display: none; }
+.reading-title-input {
+  width: 100%; font-family: var(--font-serif); font-size: 22px; font-weight: 500;
+  color: var(--text); background: transparent; border: none; outline: none;
+  line-height: 1.4; resize: none; overflow: hidden;
+}
+.reading-meta-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.reading-meta-tag {
+  font-size: 11px; padding: 2px 8px; border-radius: 20px;
+  background: var(--accent-light); color: var(--accent);
+  border: 1px solid rgba(45,90,61,0.2); cursor: pointer;
+}
+.reading-meta-tag:hover { background: var(--accent); color: #fff; }
+
+/* Body + Notes split */
+.reading-body-wrap {
+  flex: 1; display: flex; overflow: hidden; gap: 0;
+}
+.reading-body-pane {
+  flex: 1; overflow-y: auto; padding: 24px;
+  border-right: 1px solid var(--border);
+  transition: flex 0.2s ease;
+}
+.reading-body-pane.full { border-right: none; }
+.reading-notes-pane {
+  width: 50%; flex-shrink: 0; overflow-y: auto; padding: 20px;
+  display: flex; flex-direction: column; gap: 10px;
+  transition: width 0.2s ease;
+}
+.reading-notes-pane.hidden { width: 0; overflow: hidden; padding: 0; }
+.notes-pane-label {
+  font-size: 11px; color: var(--text3); text-transform: uppercase;
+  letter-spacing: .06em; display: flex; align-items: center; gap: 5px; flex-shrink: 0;
+}
+.notes-pane-label svg { width: 13px; height: 13px; }
+.notes-pane-textarea {
+  flex: 1; width: 100%; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px; font-family: var(--font-sans); font-size: 13px; line-height: 1.7;
+  color: var(--text); background: transparent; outline: none; resize: none;
+  transition: border-color var(--transition); min-height: 200px;
+}
+.notes-pane-textarea:focus { border-color: var(--accent); }
+
+/* Article body */
+.art-body-rendered {
+  font-family: var(--font-serif); font-size: 16px; line-height: 1.95;
+  color: var(--text); white-space: pre-wrap; word-break: break-word;
+}
+.art-body-rendered mark {
+  background: var(--highlight-bg); border-bottom: 2px solid var(--highlight-border);
+  padding: 0 2px; border-radius: 2px;
+}
+.art-body-editor {
+  width: 100%; min-height: 400px; font-family: var(--font-sans); font-size: 14px;
+  line-height: 1.8; color: var(--text); background: transparent;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px; resize: vertical; outline: none;
+  transition: border-color var(--transition);
+}
+.art-body-editor:focus { border-color: var(--accent); }
+
+/* Dropdown popups (tag picker, folder picker) */
+.tb-dropdown {
+  position: absolute; top: 48px; background: var(--surface);
+  border: 1px solid var(--border2); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg); z-index: 200; min-width: 200px;
+  padding: 8px; display: none; flex-direction: column; gap: 4px;
+  max-height: 320px; overflow-y: auto;
+}
+.tb-dropdown.open { display: flex; }
+.tb-dropdown.left { left: 8px; }
+.tb-dropdown.right { right: 8px; }
+.tb-dropdown-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; padding: 4px 6px 2px; }
+.tb-drop-item {
+  display: flex; align-items: center; gap: 7px; padding: 6px 8px;
+  border-radius: var(--radius); cursor: pointer; font-size: 13px; color: var(--text2);
+}
+.tb-drop-item:hover { background: var(--surface2); color: var(--text); }
+.tb-drop-item.active { background: var(--accent-light); color: var(--accent); }
+.tb-drop-item svg { width: 13px; height: 13px; flex-shrink: 0; }
+.tb-drop-input {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--border);
+  border-radius: var(--radius); font-size: 13px; outline: none;
+  font-family: var(--font-sans); color: var(--text); background: var(--surface2);
+  margin-bottom: 2px;
+}
+.tb-drop-input:focus { border-color: var(--accent); }
+
+/* Mobile swipe bar */
+.mobile-swipe-hint {
+  display: none; position: absolute; top: 0; left: 0; right: 0;
+  height: 4px; background: var(--border2); border-radius: 2px; margin: 6px auto; width: 40px;
+}
+.reading-toolbar-wrap {
+  position: relative; flex-shrink: 0;
+}
+/* TTS progress bar */
+.tts-progress {
+  height: 2px; background: var(--border); flex-shrink: 0;
+  position: relative; display: none;
+}
+.tts-progress.active { display: block; }
+.tts-progress-bar {
+  height: 100%; background: var(--accent2); transition: width 0.3s;
+  width: 0%;
+}
+
+/* Settings modal */
+.settings-modal {
+  position: fixed; inset: 0; z-index: 500; background: rgba(26,25,22,0.5);
+  display: none; align-items: center; justify-content: center;
+}
+.settings-modal.open { display: flex; }
+.settings-card {
+  background: var(--surface); border-radius: var(--radius-lg);
+  width: 460px; max-width: 95vw; max-height: 85vh;
+  box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden;
+}
+.settings-tabs {
+  display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.settings-tab {
+  flex: 1; padding: 12px; text-align: center; font-size: 13px; cursor: pointer;
+  color: var(--text2); border-bottom: 2px solid transparent; transition: all var(--transition);
+}
+.settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+.settings-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.settings-section-title { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.settings-row label { font-size: 13px; color: var(--text2); }
+.settings-row select, .settings-row input[type=range] { flex: 1; max-width: 200px; }
+.settings-row select {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 13px; font-family: var(--font-sans); color: var(--text);
+  background: var(--surface); outline: none;
+}
+.speed-val { font-size: 12px; color: var(--text3); min-width: 32px; text-align: right; }
+
+/* Passcode modal */
+.passcode-modal {
+  position: fixed; inset: 0; z-index: 600; background: rgba(26,25,22,0.6);
+  display: none; align-items: center; justify-content: center;
+}
+.passcode-modal.open { display: flex; }
+.passcode-card {
+  background: var(--surface); border-radius: var(--radius-lg);
+  padding: 28px; width: 360px; max-width: 95vw;
+  box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 16px;
+}
+.passcode-code {
+  font-size: 36px; font-weight: 500; letter-spacing: .2em; text-align: center;
+  color: var(--accent); font-family: var(--font-serif); padding: 12px;
+  background: var(--accent-light); border-radius: var(--radius); cursor: pointer;
+}
+.passcode-code:hover { background: var(--accent); color: #fff; }
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .reading-body-wrap { flex-direction: column; }
+  .reading-body-pane { border-right: none; border-bottom: 1px solid var(--border); flex: none; min-height: 60vh; }
+  .reading-notes-pane { width: 100% !important; }
+  .reading-notes-pane.hidden { width: 100% !important; height: 0; padding: 0; overflow: hidden; }
+  .reading-toolbar { overflow-x: auto; }
+  .reading-toolbar::-webkit-scrollbar { height: 0; }
+}
 </style>
 </head>
 <body>
@@ -362,6 +574,18 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
       <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
       使用 Google 帳號登入
     </button>
+    <div style="display:flex;align-items:center;gap:10px;margin:4px 0">
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+      <span style="font-size:12px;color:var(--text3)">或</span>
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <input id="passcode-input" class="field-input" placeholder="輸入6位驗證碼" maxlength="6"
+        style="letter-spacing:.15em;font-size:16px;text-align:center;flex:1"
+        oninput="this.value=this.value.replace(/\D/g,'')" />
+      <button class="btn btn-primary" onclick="loginWithPasscode()" style="white-space:nowrap">匿名登入</button>
+    </div>
+    <p style="font-size:11px;color:var(--text3);text-align:center;margin-top:-4px">在已登入裝置產生驗證碼後輸入</p>
   </div>
 </div>
 
@@ -397,7 +621,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
       <button class="icon-btn btn-primary" title="新增文章" onclick="openNewModal()" style="background:var(--accent);border-color:var(--accent);color:#fff">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       </button>
-      <button class="icon-btn" title="Gemini API Key 設定" onclick="openApikeyModal(false)">
+      <button class="icon-btn" title="設定" onclick="openSettings('tts')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
       <div id="user-avatar-wrap"></div>
@@ -424,27 +648,116 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   </div>
 </div>
 
-<!-- Reading modal -->
+<!-- Reading modal (full page) -->
 <div class="modal-overlay" id="reading-modal">
-  <div class="modal-topbar">
-    <button class="icon-btn" onclick="closeReading()" title="關閉">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-    </button>
-    <span class="modal-title" id="modal-title-bar"></span>
-    <div class="modal-actions">
-      <button class="icon-btn" id="md-toggle-btn" title="Markdown 模式" onclick="toggleMdMode()">
+  <!-- Toolbar wrap (for positioning dropdowns) -->
+  <div class="reading-toolbar-wrap">
+    <div class="reading-toolbar" id="reading-toolbar">
+      <!-- Left side -->
+      <button class="tb-btn" onclick="closeReading()" title="返回">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+      </button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" id="tb-tag-btn" onclick="toggleTbDropdown('tag-dropdown')" title="標籤">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+        TAG
+      </button>
+      <button class="tb-btn" id="tb-folder-btn" onclick="toggleTbDropdown('folder-dropdown')" title="資料夾">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+      </button>
+      <div class="tb-spacer"></div>
+      <!-- Right side -->
+      <button class="tb-btn" id="tb-md-btn" onclick="toggleReadingMd()" title="Markdown編輯">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15V9l3 3 3-3v6M17 9v6"/></svg>
+        MD
       </button>
-      <button class="icon-btn" id="ai-btn" title="AI 分析" onclick="runAiAnalysis()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="M12 8v4l3 3"/></svg>
+      <button class="tb-btn" id="tb-notes-btn" onclick="toggleNotesPane()" title="筆記欄" class="active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5l4 4L7 21l-4 1 1-4z"/></svg>
+        記
       </button>
-      <button class="icon-btn btn-danger" title="刪除文章" onclick="deleteCurrentArticle()" style="color:var(--danger)">
+      <button class="tb-btn read-todo" id="tb-read-btn" onclick="cycleReadStatus()" title="閱讀狀態">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        閱
+      </button>
+      <button class="tb-btn" id="tb-fav-btn" onclick="toggleFavorite()" title="收藏">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        ♥
+      </button>
+      <button class="tb-btn" id="tb-tts-btn" onclick="toggleTTS()" title="朗讀">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+        🔊
+      </button>
+      <button class="tb-btn" id="tb-ai-btn" onclick="runAiAnalysis()" title="AI分析">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="m9 12 2 2 4-4"/></svg>
+        AI
+      </button>
+      <button class="tb-btn" id="tb-collapse-btn" onclick="toggleTitleBar()" title="摺疊標題">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="18 15 12 9 6 15"/></svg>
+      </button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" style="color:var(--danger)" onclick="deleteCurrentArticle()" title="刪除">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
       </button>
     </div>
+    <!-- TTS progress -->
+    <div class="tts-progress" id="tts-progress"><div class="tts-progress-bar" id="tts-progress-bar"></div></div>
+    <!-- TAG dropdown -->
+    <div class="tb-dropdown left" id="tag-dropdown">
+      <div class="tb-dropdown-label">新增標籤</div>
+      <input class="tb-drop-input" id="tag-new-input" placeholder="輸入後按 Enter…" onkeydown="handleTagInput(event)" />
+      <div class="tb-dropdown-label">現有標籤</div>
+      <div id="tag-dropdown-list"></div>
+    </div>
+    <!-- Folder dropdown -->
+    <div class="tb-dropdown right" id="folder-dropdown">
+      <div class="tb-dropdown-label">選擇資料夾</div>
+      <div id="folder-dropdown-list"></div>
+    </div>
   </div>
-  <div class="modal-body" id="modal-body">
-    <div class="modal-content" id="modal-content"></div>
+
+  <!-- Title bar -->
+  <div class="reading-title-bar" id="reading-title-bar">
+    <textarea class="reading-title-input" id="reading-title-input" rows="1" oninput="autoResizeTitle(this); scheduleFieldSave('title', this.value)"></textarea>
+    <div class="reading-meta-row" id="reading-meta-row"></div>
+  </div>
+
+  <!-- Body + Notes -->
+  <div class="reading-body-wrap">
+    <div class="reading-body-pane" id="reading-body-pane">
+      <div id="reading-body-content"></div>
+    </div>
+    <div class="reading-notes-pane" id="reading-notes-pane">
+      <div class="notes-pane-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5l4 4L7 21l-4 1 1-4z"/></svg>
+        我的筆記
+      </div>
+      <textarea class="notes-pane-textarea" id="reading-notes-textarea" placeholder="記下你的想法…" oninput="scheduleFieldSave('notes', this.value)"></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div class="settings-modal" id="settings-modal">
+  <div class="settings-card">
+    <div class="settings-tabs">
+      <div class="settings-tab active" onclick="switchSettingsTab('tts')">🔊 TTS 設定</div>
+      <div class="settings-tab" onclick="switchSettingsTab('apikey')">🔑 API Key</div>
+      <div class="settings-tab" onclick="switchSettingsTab('account')">👤 帳號</div>
+    </div>
+    <div class="settings-body" id="settings-body"></div>
+  </div>
+</div>
+
+<!-- Passcode modal -->
+<div class="passcode-modal" id="passcode-modal">
+  <div class="passcode-card">
+    <h3 style="font-family:var(--font-serif);font-size:16px;font-weight:500">匿名登入驗證碼</h3>
+    <p style="font-size:13px;color:var(--text2);line-height:1.6">在另一台裝置的登入頁輸入此驗證碼，即可以相同帳號匿名瀏覽。驗證碼10分鐘內有效。</p>
+    <div class="passcode-code" id="passcode-code" onclick="copyPasscode()" title="點擊複製">------</div>
+    <p style="font-size:12px;color:var(--text3);text-align:center">點擊驗證碼可複製</p>
+    <div style="display:flex;justify-content:flex-end">
+      <button class="btn" onclick="document.getElementById('passcode-modal').classList.remove('open')">關閉</button>
+    </div>
   </div>
 </div>
 
@@ -454,43 +767,60 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   設為 Highlight
 </div>
 
-<!-- New Article modal -->
+<!-- New Article modal (full page) -->
 <div class="new-modal" id="new-modal">
-  <div class="new-card">
+  <div class="new-modal-topbar">
+    <button class="icon-btn" onclick="closeNewModal()" title="關閉">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
     <h2>新增文章</h2>
-    <div>
-      <div class="field-label">標題</div>
-      <input class="field-input" id="new-title" placeholder="文章標題" />
-    </div>
-    <div>
-      <div class="field-label">內文（貼上原文）</div>
-      <textarea class="field-input" id="new-body" placeholder="貼上文章全文…"></textarea>
-    </div>
-    <div>
-      <div class="field-label">標籤（逗號分隔）</div>
-      <input class="field-input" id="new-tags" placeholder="心理學, 認知偏誤" />
-    </div>
-    <div>
-      <div class="field-label">資料夾</div>
-      <select class="field-input" id="new-folder"></select>
-    </div>
-    <div id="new-ai-section" style="display:none">
-      <div class="ai-section">
-        <div class="ai-label">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="m9 12 2 2 4-4"/></svg>
-          AI 建議
-        </div>
-        <div class="ai-summary" id="new-ai-summary"></div>
-        <div class="ai-tags" id="new-ai-tags"></div>
-      </div>
-    </div>
-    <div id="new-ai-loading" style="display:none" class="ai-loading">
-      <div class="spinner"></div> AI 分析中…
-    </div>
-    <div class="new-actions">
+    <div style="display:flex;gap:8px">
       <button class="btn" onclick="runNewAi()" id="new-ai-btn">✦ AI 分析</button>
-      <button class="btn" onclick="closeNewModal()">取消</button>
-      <button class="btn btn-primary" onclick="saveNewArticle()">儲存</button>
+      <button class="btn btn-primary" id="new-save-btn" onclick="saveNewArticle()">儲存</button>
+    </div>
+  </div>
+  <div class="new-card">
+    <div class="new-card-inner">
+      <div>
+        <div class="field-label">標題</div>
+        <input class="field-input" id="new-title" placeholder="文章標題" />
+      </div>
+      <div>
+        <div class="field-label">內文（貼上原文）</div>
+        <textarea class="field-input" id="new-body" placeholder="貼上文章全文…" style="min-height:320px"></textarea>
+      </div>
+      <!-- Collapsible meta -->
+      <div>
+        <div class="meta-toggle" id="meta-toggle" onclick="toggleMetaPanel()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          標籤與資料夾
+        </div>
+        <div class="meta-panel" id="meta-panel">
+          <div class="meta-row">
+            <div>
+              <div class="field-label">標籤（逗號分隔）</div>
+              <input class="field-input" id="new-tags" placeholder="心理學, 認知偏誤" />
+            </div>
+            <div>
+              <div class="field-label">資料夾</div>
+              <select class="field-input" id="new-folder"></select>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="new-ai-loading" style="display:none" class="ai-loading">
+        <div class="spinner"></div> AI 分析中…
+      </div>
+      <div id="new-ai-section" style="display:none">
+        <div class="ai-section">
+          <div class="ai-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="m9 12 2 2 4-4"/></svg>
+            AI 建議
+          </div>
+          <div class="ai-summary" id="new-ai-summary"></div>
+          <div class="ai-tags" id="new-ai-tags"></div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -610,9 +940,9 @@ onAuthStateChanged(auth, user => {
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app').classList.add('visible');
     renderUserAvatar();
-    // Check if Gemini key is set
+    // Check if Gemini key is set - prompt via settings (skippable)
     if (!localStorage.getItem('gemini_key')) {
-      openApikeyModal(true); // first time, can't skip
+      setTimeout(() => openSettings('apikey'), 800);
     }
     subscribeData();
   } else {
@@ -640,7 +970,13 @@ function subscribeData() {
   // Articles
   onSnapshot(query(collection(db, 'articles'), where('uid','==',uid)), snap => {
     articles = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    articles.sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
+    articles.sort((a,b) => {
+      // plan (待讀) floats to top, done (已讀) stays normal, else by date
+      const rank = s => s === 'plan' ? 0 : s === 'done' ? 2 : 1;
+      const ra = rank(a.readStatus||''), rb = rank(b.readStatus||'');
+      if (ra !== rb) return ra - rb;
+      return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
+    });
     renderTagBar();
     renderArticleList();
   });
@@ -808,8 +1144,14 @@ function renderArticleList() {
     row.dataset.id = art.id;
     const tagsHtml = (art.tags||[]).slice(0,3).map(t=>`<span class="article-tag">${escHtml(t)}</span>`).join('');
     const dateStr = art.createdAt ? formatDate(art.createdAt.seconds*1000) : '';
+    const readDot = art.readStatus === 'plan' ? '<span style="width:7px;height:7px;border-radius:50%;background:#2d7a4f;flex-shrink:0;display:inline-block"></span>'
+      : art.readStatus === 'done' ? '<span style="width:7px;height:7px;border-radius:50%;background:#c0739a;flex-shrink:0;display:inline-block"></span>'
+      : '<span style="width:7px;height:7px;border-radius:50%;background:var(--border2);flex-shrink:0;display:inline-block"></span>';
+    const favDot = art.favorite ? '<span style="font-size:10px;color:#c0392b">♥</span>' : '';
     row.innerHTML = `
+      ${readDot}
       <span class="article-title">${escHtml(art.title||'未命名')}</span>
+      ${favDot}
       <div class="article-tags">${tagsHtml}</div>
       <span class="article-date">${dateStr}</span>
     `;
@@ -848,91 +1190,286 @@ function hideHighlightTooltip() {
 }
 
 // ── Reading modal ──
+let notesVisible = true;
+let titleBarVisible = true;
+let ttsUtterance = null;
+let ttsPlaying = false;
+let toolbarCollapseTimer = null;
+let isMobile = () => window.innerWidth <= 768;
+
 window.openReading = (id) => {
   const art = articles.find(a => a.id === id);
   if (!art) return;
   currentArticleId = id;
   mdMode = false;
+  titleBarVisible = true;
+  notesVisible = true;
   document.getElementById('reading-modal').classList.add('open');
-  document.getElementById('modal-title-bar').textContent = art.title||'';
-  document.getElementById('md-toggle-btn').classList.remove('active');
-  renderModalContent(art);
+  document.getElementById('tb-md-btn').classList.remove('active');
+  document.getElementById('tb-notes-btn').classList.add('active');
+  document.getElementById('reading-title-bar').classList.remove('collapsed');
+  document.getElementById('reading-notes-pane').classList.remove('hidden');
+  document.getElementById('tb-collapse-btn').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="18 15 12 9 6 15"/></svg>`;
+  renderReadingPage(art);
+  stopTTS();
+  // mobile toolbar auto-hide
+  setupMobileToolbar();
 };
 
 window.closeReading = () => {
   document.getElementById('reading-modal').classList.remove('open');
-  currentArticleId = null;
-  // hide highlight menu
   document.getElementById('highlight-menu').style.display = 'none';
+  closeTbDropdowns();
+  stopTTS();
+  currentArticleId = null;
 };
 
-function renderModalContent(art) {
-  const content = document.getElementById('modal-content');
-  const tagsHtml = (art.tags||[]).map(t=>`<span class="meta-tag">${escHtml(t)}</span>`).join('');
-  let bodyHtml = '';
+function renderReadingPage(art) {
+  // Title
+  const titleEl = document.getElementById('reading-title-input');
+  titleEl.value = art.title || '';
+  autoResizeTitle(titleEl);
+  // Meta tags row
+  const metaRow = document.getElementById('reading-meta-row');
+  metaRow.innerHTML = (art.tags||[]).map(t =>
+    `<span class="reading-meta-tag" onclick="removeTagFromArticle('${escHtml(t)}')">${escHtml(t)} ×</span>`
+  ).join('');
+  if (art.aiSummary) {
+    metaRow.innerHTML += `<span style="font-size:11px;color:var(--text3);margin-left:4px">AI: ${escHtml(art.aiSummary.slice(0,60))}…</span>`;
+  }
+  // Body
+  renderBodyPane(art);
+  // Notes
+  document.getElementById('reading-notes-textarea').value = art.notes || '';
+  // Toolbar state
+  updateToolbarState(art);
+  // Tag & folder dropdowns
+  renderTagDropdown(art);
+  renderFolderDropdown(art);
+}
+
+function renderBodyPane(art) {
+  const pane = document.getElementById('reading-body-content');
   if (mdMode) {
-    bodyHtml = `<textarea class="article-body-editor" id="body-editor" oninput="scheduleBodySave()">${escHtml(art.body||'')}</textarea>`;
+    pane.innerHTML = `<textarea class="art-body-editor" id="body-editor" oninput="scheduleFieldSave('body', this.value)">${escHtml(art.body||'')}</textarea>`;
   } else {
-    const rendered = renderBody(art.body||'', art.highlight||'');
-    bodyHtml = `<div class="article-body-rendered" id="body-rendered">${rendered}</div>`;
+    let escaped = escHtml(art.body||'');
+    if (art.highlight) {
+      const hEsc = escHtml(art.highlight);
+      escaped = escaped.replace(hEsc, `<mark>${hEsc}</mark>`);
+    }
+    pane.innerHTML = `<div class="art-body-rendered" id="body-rendered">${escaped}</div>`;
   }
-  const aiHtml = art.aiSummary ? `<div class="ai-section" style="margin-top:24px"><div class="ai-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="m9 12 2 2 4-4"/></svg> AI 摘要</div><div class="ai-summary">${escHtml(art.aiSummary)}</div></div>` : '';
-  content.innerHTML = `
-    <div class="article-heading">${escHtml(art.title||'未命名')}</div>
-    <div class="article-meta">${tagsHtml}</div>
-    ${bodyHtml}
-    ${aiHtml}
-    <div class="notes-section">
-      <div class="notes-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5l4 4L7 21l-4 1 1-4z"/></svg> 我的筆記</div>
-      <textarea class="notes-editor" id="notes-editor" placeholder="記下你的想法…" oninput="scheduleNotesSave()">${escHtml(art.notes||'')}</textarea>
-    </div>
-  `;
 }
 
-function renderBody(body, highlight) {
-  let escaped = escHtml(body);
-  if (highlight) {
-    const hEsc = escHtml(highlight);
-    escaped = escaped.replace(hEsc, `<mark>${hEsc}</mark>`);
-  }
-  return escaped;
+function updateToolbarState(art) {
+  // read status
+  const readBtn = document.getElementById('tb-read-btn');
+  readBtn.className = 'tb-btn ' + ({'':'read-todo','plan':'read-plan','done':'read-done'}[art.readStatus||''] || 'read-todo');
+  // fav
+  const favBtn = document.getElementById('tb-fav-btn');
+  favBtn.className = 'tb-btn' + (art.favorite ? ' fav-on' : '');
 }
 
-window.toggleMdMode = () => {
+window.autoResizeTitle = (el) => {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+};
+
+window.scheduleFieldSave = (field, value) => {
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(async () => {
+    if (!currentArticleId) return;
+    try { await updateDoc(doc(db, 'articles', currentArticleId), { [field]: value }); } catch(e) {}
+  }, 800);
+};
+
+window.toggleReadingMd = () => {
   const art = articles.find(a => a.id === currentArticleId);
   if (!art) return;
   if (mdMode) {
-    // save before switching
     const editor = document.getElementById('body-editor');
-    if (editor) saveBodyNow(editor.value);
+    if (editor) scheduleFieldSave('body', editor.value);
   }
   mdMode = !mdMode;
-  document.getElementById('md-toggle-btn').classList.toggle('active', mdMode);
-  renderModalContent(art);
+  document.getElementById('tb-md-btn').classList.toggle('active', mdMode);
+  renderBodyPane(art);
 };
 
-window.scheduleBodySave = () => {
-  clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(() => {
-    const editor = document.getElementById('body-editor');
-    if (editor) saveBodyNow(editor.value);
-  }, 800);
+window.toggleNotesPane = () => {
+  notesVisible = !notesVisible;
+  const pane = document.getElementById('reading-notes-pane');
+  const bodyPane = document.getElementById('reading-body-pane');
+  pane.classList.toggle('hidden', !notesVisible);
+  bodyPane.classList.toggle('full', !notesVisible);
+  document.getElementById('tb-notes-btn').classList.toggle('active', notesVisible);
 };
 
-async function saveBodyNow(val) {
-  if (!currentArticleId) return;
-  await updateDoc(doc(db, 'articles', currentArticleId), { body: val });
+window.toggleTitleBar = () => {
+  titleBarVisible = !titleBarVisible;
+  document.getElementById('reading-title-bar').classList.toggle('collapsed', !titleBarVisible);
+  const btn = document.getElementById('tb-collapse-btn');
+  btn.innerHTML = titleBarVisible
+    ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="18 15 12 9 6 15"/></svg>`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="6 9 12 15 18 9"/></svg>`;
+};
+
+// ── Toolbar dropdowns ──
+window.toggleTbDropdown = (id) => {
+  const dd = document.getElementById(id);
+  const isOpen = dd.classList.contains('open');
+  closeTbDropdowns();
+  if (!isOpen) dd.classList.add('open');
+};
+function closeTbDropdowns() {
+  document.querySelectorAll('.tb-dropdown').forEach(d => d.classList.remove('open'));
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.reading-toolbar-wrap')) closeTbDropdowns();
+});
+
+// ── Tag dropdown ──
+function renderTagDropdown(art) {
+  const list = document.getElementById('tag-dropdown-list');
+  const allTags = new Set(articles.flatMap(a => a.tags||[]));
+  list.innerHTML = '';
+  [...allTags].sort().forEach(tag => {
+    const hasTag = (art.tags||[]).includes(tag);
+    const item = document.createElement('div');
+    item.className = 'tb-drop-item' + (hasTag ? ' active' : '');
+    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> ${escHtml(tag)}`;
+    item.onclick = () => toggleTagOnArticle(tag);
+    list.appendChild(item);
+  });
 }
 
-window.scheduleNotesSave = () => {
-  clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(async () => {
-    const editor = document.getElementById('notes-editor');
-    if (editor && currentArticleId) {
-      await updateDoc(doc(db, 'articles', currentArticleId), { notes: editor.value });
-    }
-  }, 800);
+window.handleTagInput = (e) => {
+  if (e.key === 'Enter') {
+    const val = e.target.value.trim();
+    if (val) { toggleTagOnArticle(val); e.target.value = ''; }
+  }
 };
+
+async function toggleTagOnArticle(tag) {
+  const art = articles.find(a => a.id === currentArticleId);
+  if (!art) return;
+  const tags = art.tags || [];
+  const newTags = tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag];
+  await updateDoc(doc(db, 'articles', currentArticleId), { tags: newTags });
+  renderTagDropdown({...art, tags: newTags});
+  renderReadingPage({...art, tags: newTags});
+}
+
+window.removeTagFromArticle = async (tag) => {
+  await toggleTagOnArticle(tag);
+};
+
+// ── Folder dropdown ──
+function renderFolderDropdown(art) {
+  const list = document.getElementById('folder-dropdown-list');
+  list.innerHTML = '';
+  const noneItem = document.createElement('div');
+  noneItem.className = 'tb-drop-item' + (!art.folderId ? ' active' : '');
+  noneItem.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> 無資料夾`;
+  noneItem.onclick = () => setArticleFolder(null);
+  list.appendChild(noneItem);
+  folders.forEach(f => {
+    const item = document.createElement('div');
+    item.className = 'tb-drop-item' + (art.folderId === f.id ? ' active' : '');
+    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(f.name)}`;
+    item.onclick = () => setArticleFolder(f.id);
+    list.appendChild(item);
+  });
+}
+
+async function setArticleFolder(folderId) {
+  if (!currentArticleId) return;
+  await updateDoc(doc(db, 'articles', currentArticleId), { folderId: folderId || null });
+  closeTbDropdowns();
+  showToast(folderId ? '已移至資料夾' : '已移出資料夾');
+}
+
+// ── Read status ──
+window.cycleReadStatus = async () => {
+  const art = articles.find(a => a.id === currentArticleId);
+  if (!art) return;
+  const cycle = {'': 'plan', 'plan': 'done', 'done': ''};
+  const next = cycle[art.readStatus||''];
+  await updateDoc(doc(db, 'articles', currentArticleId), { readStatus: next });
+  const labels = {'':'灰（未安排）', 'plan':'綠（待讀）', 'done':'粉（已讀）'};
+  showToast('閱讀狀態：' + labels[next]);
+};
+
+// ── Favorite ──
+window.toggleFavorite = async () => {
+  const art = articles.find(a => a.id === currentArticleId);
+  if (!art) return;
+  await updateDoc(doc(db, 'articles', currentArticleId), { favorite: !art.favorite });
+  showToast(art.favorite ? '已取消收藏' : '已加入收藏 ♥');
+};
+
+// ── TTS ──
+window.toggleTTS = () => {
+  if (ttsPlaying) { stopTTS(); return; }
+  const art = articles.find(a => a.id === currentArticleId);
+  if (!art) return;
+  const text = (art.title || '') + '。' + (art.body || '');
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'zh-TW';
+  const voiceName = localStorage.getItem('tts_voice');
+  const rate = parseFloat(localStorage.getItem('tts_rate') || '1');
+  utter.rate = rate;
+  if (voiceName) {
+    const voices = speechSynthesis.getVoices();
+    const v = voices.find(v => v.name === voiceName);
+    if (v) utter.voice = v;
+  }
+  utter.onstart = () => {
+    ttsPlaying = true;
+    document.getElementById('tb-tts-btn').classList.add('active');
+    document.getElementById('tts-progress').classList.add('active');
+  };
+  utter.onend = utter.onerror = () => {
+    ttsPlaying = false;
+    document.getElementById('tb-tts-btn').classList.remove('active');
+    document.getElementById('tts-progress').classList.remove('active');
+    document.getElementById('tts-progress-bar').style.width = '0%';
+  };
+  utter.onboundary = (e) => {
+    if (utter.text.length > 0) {
+      const pct = Math.round((e.charIndex / utter.text.length) * 100);
+      document.getElementById('tts-progress-bar').style.width = pct + '%';
+    }
+  };
+  ttsUtterance = utter;
+  speechSynthesis.speak(utter);
+};
+
+function stopTTS() {
+  speechSynthesis.cancel();
+  ttsPlaying = false;
+  const btn = document.getElementById('tb-tts-btn');
+  if (btn) btn.classList.remove('active');
+  const prog = document.getElementById('tts-progress');
+  if (prog) prog.classList.remove('active');
+}
+
+// ── Mobile toolbar auto-hide ──
+function setupMobileToolbar() {
+  if (!isMobile()) return;
+  const toolbar = document.getElementById('reading-toolbar');
+  clearTimeout(toolbarCollapseTimer);
+  toolbar.classList.remove('collapsed');
+  const resetTimer = () => {
+    clearTimeout(toolbarCollapseTimer);
+    toolbar.classList.remove('collapsed');
+    toolbarCollapseTimer = setTimeout(() => toolbar.classList.add('collapsed'), 3000);
+  };
+  const modal = document.getElementById('reading-modal');
+  modal.addEventListener('touchstart', resetTimer, {passive: true});
+  modal.addEventListener('scroll', resetTimer, {passive: true});
+  resetTimer();
+}
 
 // ── Highlight selection ──
 document.addEventListener('mouseup', (e) => {
@@ -978,8 +1515,9 @@ window.deleteCurrentArticle = async () => {
 window.runAiAnalysis = async () => {
   const art = articles.find(a => a.id === currentArticleId);
   if (!art) return;
-  const btn = document.getElementById('ai-btn');
-  btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--accent2);border-radius:50%;animation:spin .8s linear infinite"></div>';
+  const btn = document.getElementById('tb-ai-btn');
+  const origHTML = btn.innerHTML;
+  btn.innerHTML = '<div class="spinner"></div>';
   btn.disabled = true;
   try {
     const result = await callGemini(`以下是一篇文章，請用繁體中文：1) 寫一段3句話以內的摘要；2) 建議3-5個標籤（用逗號分隔）。
@@ -992,21 +1530,32 @@ window.runAiAnalysis = async () => {
     const summaryMatch = result.match(/摘要：(.+)/);
     const tagsMatch = result.match(/標籤：(.+)/);
     const summary = summaryMatch ? summaryMatch[1].trim() : '';
-    const tags = tagsMatch ? tagsMatch[1].split(',').map(t=>t.trim()).filter(Boolean) : [];
-    await updateDoc(doc(db, 'articles', currentArticleId), { aiSummary: summary, tags });
+    const newTags = tagsMatch ? tagsMatch[1].split(',').map(t=>t.trim()).filter(Boolean) : [];
+    await updateDoc(doc(db, 'articles', currentArticleId), { aiSummary: summary, tags: newTags });
     showToast('AI 分析完成');
   } catch(e) { showToast('AI 分析失敗：' + e.message); }
-  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="M12 8v4l3 3"/></svg>`;
+  btn.innerHTML = origHTML;
   btn.disabled = false;
 };
 
 // ── New article modal ──
+window.toggleMetaPanel = () => {
+  const panel = document.getElementById('meta-panel');
+  const toggle = document.getElementById('meta-toggle');
+  panel.classList.toggle('open');
+  toggle.classList.toggle('open');
+};
+
 window.openNewModal = () => {
   document.getElementById('new-title').value = '';
   document.getElementById('new-body').value = '';
   document.getElementById('new-tags').value = '';
   document.getElementById('new-ai-section').style.display = 'none';
   document.getElementById('new-ai-loading').style.display = 'none';
+  document.getElementById('meta-panel').classList.remove('open');
+  document.getElementById('meta-toggle').classList.remove('open');
+  document.getElementById('new-save-btn').disabled = false;
+  document.getElementById('new-save-btn').textContent = '儲存';
   renderFolderSelects();
   document.getElementById('new-modal').classList.add('open');
   setTimeout(() => document.getElementById('new-title').focus(), 50);
@@ -1060,18 +1609,27 @@ window.saveNewArticle = async () => {
   const title = document.getElementById('new-title').value.trim();
   const body = document.getElementById('new-body').value.trim();
   if (!title) { showToast('請填寫標題'); return; }
+  const saveBtn = document.getElementById('new-save-btn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = '儲存中…';
   const tagsRaw = document.getElementById('new-tags').value;
   const tags = tagsRaw ? tagsRaw.split(',').map(t=>t.trim()).filter(Boolean) : [];
   const folderId = document.getElementById('new-folder').value || null;
   const summaryEl = document.getElementById('new-ai-summary');
   const aiSummary = summaryEl?.textContent || '';
-  await addDoc(collection(db, 'articles'), {
-    uid: currentUser.uid,
-    title, body, tags, folderId, notes: '', highlight: '',
-    aiSummary, createdAt: serverTimestamp()
-  });
-  closeNewModal();
-  showToast('文章已儲存');
+  try {
+    await addDoc(collection(db, 'articles'), {
+      uid: currentUser.uid,
+      title, body, tags, folderId, notes: '', highlight: '',
+      aiSummary, createdAt: serverTimestamp()
+    });
+    closeNewModal();
+    showToast('文章已儲存 ✓');
+  } catch(e) {
+    showToast('儲存失敗：' + e.message);
+    saveBtn.disabled = false;
+    saveBtn.textContent = '儲存';
+  }
 };
 
 // ── Folder modal ──
@@ -1140,48 +1698,135 @@ function openApikeyModal(firstTime) {
   modal.classList.add('open');
   setTimeout(() => input.focus(), 50);
 }
-window.closeApikeyModal = (saved) => {
-  document.getElementById('apikey-modal').classList.remove('open');
-  if (saved) showToast('API Key 已儲存');
+// API key now handled in settings modal
+
+// ── Settings modal ──
+let currentSettingsTab = 'tts';
+window.openSettings = (tab) => {
+  currentSettingsTab = tab || 'tts';
+  renderSettingsBody();
+  document.getElementById('settings-modal').classList.add('open');
+  document.querySelectorAll('.settings-tab').forEach((t,i) => {
+    t.classList.toggle('active', ['tts','apikey','account'][i] === currentSettingsTab);
+  });
 };
-window.saveApiKey = () => {
-  const val = document.getElementById('apikey-input').value.trim();
-  if (!val) { showToast('請輸入 API Key'); return; }
-  localStorage.setItem('gemini_key', val);
-  closeApikeyModal(true);
+window.switchSettingsTab = (tab) => {
+  currentSettingsTab = tab;
+  document.querySelectorAll('.settings-tab').forEach((t,i) => {
+    t.classList.toggle('active', ['tts','apikey','account'][i] === tab);
+  });
+  renderSettingsBody();
 };
-window.testGeminiKey = async () => {
-  const val = document.getElementById('apikey-input').value.trim();
-  if (!val) { showToast('請先輸入 Key'); return; }
-  const status = document.getElementById('apikey-status');
-  status.style.display = 'flex';
-  status.className = 'apikey-status';
-  status.innerHTML = '<div class="spinner"></div> 測試中…';
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${val}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: '回覆「ok」' }] }] })
-    });
-    if (res.ok) {
-      status.className = 'apikey-status ok';
-      status.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M20 6L9 17l-5-5"/></svg> 連線成功！';
-    } else {
-      status.className = 'apikey-status err';
-      status.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg> Key 無效（HTTP ' + res.status + '）';
-    }
-  } catch(e) {
-    status.className = 'apikey-status err';
-    status.innerHTML = '連線失敗：' + e.message;
+document.getElementById('settings-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+});
+
+function renderSettingsBody() {
+  const body = document.getElementById('settings-body');
+  if (currentSettingsTab === 'tts') {
+    const voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith('zh') || v.lang.startsWith('cmn'));
+    const savedVoice = localStorage.getItem('tts_voice') || '';
+    const savedRate = localStorage.getItem('tts_rate') || '1';
+    body.innerHTML = `
+      <div class="settings-section-title">語音設定</div>
+      <div class="settings-row">
+        <label>人聲選擇</label>
+        <select id="voice-select" onchange="localStorage.setItem('tts_voice',this.value)">
+          <option value="">系統預設</option>
+          ${voices.map(v=>`<option value="${escHtml(v.name)}" ${v.name===savedVoice?'selected':''}>${escHtml(v.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="settings-row">
+        <label>語速</label>
+        <input type="range" min="0.5" max="2" step="0.1" value="${savedRate}"
+          oninput="localStorage.setItem('tts_rate',this.value);document.getElementById('speed-val').textContent=parseFloat(this.value).toFixed(1)+'x'" />
+        <span class="speed-val" id="speed-val">${parseFloat(savedRate).toFixed(1)}x</span>
+      </div>
+      <button class="btn" onclick="speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance('測試語音，你好！'),{lang:'zh-TW',rate:parseFloat(localStorage.getItem('tts_rate')||1),voice:speechSynthesis.getVoices().find(v=>v.name===localStorage.getItem('tts_voice'))||null}))">▶ 測試</button>
+    `;
+  } else if (currentSettingsTab === 'apikey') {
+    const key = localStorage.getItem('gemini_key') || '';
+    body.innerHTML = `
+      <div class="settings-section-title">Gemini API Key</div>
+      <p style="font-size:13px;color:var(--text2);line-height:1.6">Key 只存在瀏覽器本地，不上傳伺服器。<br><a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent)">前往 Google AI Studio 申請 →</a></p>
+      <div class="apikey-input-wrap">
+        <input class="field-input" id="settings-key-input" type="password" value="${escHtml(key)}" placeholder="貼上 Gemini API Key…" style="padding-right:36px" />
+        <button class="apikey-eye" onclick="const i=document.getElementById('settings-key-input');i.type=i.type==='password'?'text':'password'">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-primary" onclick="const v=document.getElementById('settings-key-input').value.trim();if(v){localStorage.setItem('gemini_key',v);showToast('已儲存');}">儲存</button>
+      </div>
+    `;
+  } else if (currentSettingsTab === 'account') {
+    body.innerHTML = `
+      <div class="settings-section-title">帳號</div>
+      <div class="settings-row"><label>已登入為</label><span style="font-size:13px;color:var(--text2)">${escHtml(currentUser?.displayName||currentUser?.email||'匿名')}</span></div>
+      <div class="settings-section-title" style="margin-top:8px">匿名登入驗證碼</div>
+      <p style="font-size:13px;color:var(--text2);line-height:1.6">產生一組6位驗證碼，在另一台裝置以相同帳號匿名瀏覽，10分鐘內有效。</p>
+      <button class="btn btn-primary" onclick="generatePasscode()">產生驗證碼</button>
+      <div style="margin-top:8px">
+        <button class="btn btn-danger" onclick="if(confirm('確定登出？'))signOut(auth)">登出</button>
+      </div>
+    `;
   }
-};
-window.toggleKeyVisibility = () => {
-  const input = document.getElementById('apikey-input');
-  input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+// ── Passcode ──
+window.generatePasscode = async () => {
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expires = Date.now() + 10 * 60 * 1000;
+  await setDoc(doc(db, 'passcodes', code), {
+    uid: currentUser.uid, expires
+  });
+  document.getElementById('passcode-code').textContent = code;
+  document.getElementById('passcode-modal').classList.add('open');
+  document.getElementById('settings-modal').classList.remove('open');
 };
 
-// Expose openApikeyModal for settings button
-window.openApikeyModal = openApikeyModal;
+window.copyPasscode = () => {
+  const code = document.getElementById('passcode-code').textContent;
+  navigator.clipboard.writeText(code).then(() => showToast('驗證碼已複製'));
+};
+
+window.loginWithPasscode = async () => {
+  const code = document.getElementById('passcode-input').value.trim();
+  if (code.length !== 6) { showToast('請輸入6位驗證碼'); return; }
+  try {
+    const snap = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js')
+      .then(m => m.getDoc(m.doc(db, 'passcodes', code)));
+    if (!snap.exists()) { showToast('驗證碼無效'); return; }
+    const data = snap.data();
+    if (Date.now() > data.expires) { showToast('驗證碼已過期'); return; }
+    // Store the uid locally so app loads correct data without Google login
+    localStorage.setItem('passcode_uid', data.uid);
+    localStorage.setItem('passcode_expires', data.expires);
+    showToast('驗證碼正確，以匿名模式登入中…');
+    // Trigger anonymous data load
+    loadAnonymousData(data.uid);
+  } catch(e) { showToast('登入失敗：' + e.message); }
+};
+
+function loadAnonymousData(uid) {
+  currentUser = { uid, displayName: '匿名', photoURL: null, isAnonymous: true };
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
+  subscribeData();
+}
+
+// Check saved passcode on load
+(function checkPasscode() {
+  const uid = localStorage.getItem('passcode_uid');
+  const exp = parseInt(localStorage.getItem('passcode_expires') || '0');
+  if (uid && Date.now() < exp) {
+    // Will be overridden by onAuthStateChanged if Google user exists
+    setTimeout(() => {
+      if (!currentUser) loadAnonymousData(uid);
+    }, 1500);
+  }
+})();
 
 // ── Helpers ──
 function escHtml(s) {
@@ -1210,10 +1855,15 @@ document.getElementById('folder-modal').addEventListener('click', e => { if(e.ta
 // ESC key
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    if (document.getElementById('reading-modal').classList.contains('open')) closeReading();
-    else if (document.getElementById('new-modal').classList.contains('open')) closeNewModal();
-    else if (document.getElementById('folder-modal').classList.contains('open')) closeFolderModal();
-    else if (searchOpen) toggleSearch();
+    // close dropdowns first
+    const anyDd = document.querySelector('.tb-dropdown.open');
+    if (anyDd) { anyDd.classList.remove('open'); return; }
+    if (document.getElementById('settings-modal').classList.contains('open')) { document.getElementById('settings-modal').classList.remove('open'); return; }
+    if (document.getElementById('passcode-modal').classList.contains('open')) { document.getElementById('passcode-modal').classList.remove('open'); return; }
+    if (document.getElementById('reading-modal').classList.contains('open')) { closeReading(); return; }
+    if (document.getElementById('new-modal').classList.contains('open')) { closeNewModal(); return; }
+    if (document.getElementById('folder-modal').classList.contains('open')) { closeFolderModal(); return; }
+    if (searchOpen) toggleSearch();
   }
 });
 </script>
