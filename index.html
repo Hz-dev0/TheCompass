@@ -547,7 +547,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 <!-- Firebase + App Script -->
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, getDocs, onSnapshot, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -586,8 +586,23 @@ let selectionRange = null;
 // ── Auth ──
 window.signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
-  try { await signInWithPopup(auth, provider); } catch(e) { showToast('登入失敗：' + e.message); }
+  try {
+    await signInWithPopup(auth, provider);
+  } catch(e) {
+    // popup blocked (incognito, browser setting) → fallback to redirect
+    if (e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request' || e.code === 'auth/popup-closed-by-user') {
+      try { await signInWithRedirect(auth, provider); }
+      catch(e2) { showToast('登入失敗：' + e2.message); }
+    } else {
+      showToast('登入失敗：' + e.message);
+    }
+  }
 };
+
+// Handle redirect result (after Google login redirect back)
+getRedirectResult(auth).catch(e => {
+  if (e && e.code !== 'auth/no-current-user') showToast('登入失敗：' + e.message);
+});
 
 onAuthStateChanged(auth, user => {
   if (user) {
