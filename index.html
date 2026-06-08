@@ -631,13 +631,134 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 
 /* Mobile responsive */
 @media (max-width: 768px) {
-  .reading-body-wrap { flex-direction: column; }
-  .reading-body-pane { border-right: none; border-bottom: 1px solid var(--border); flex: none; min-height: 60vh; }
-  .reading-notes-pane { width: 100% !important; }
-  .reading-notes-pane.hidden { width: 100% !important; height: 0; padding: 0; overflow: hidden; }
-  .reading-toolbar { overflow-x: auto; }
+
+  /* ── Topbar mobile ── */
+  .topbar-logo { display: none; }
+  .topbar-sep:first-of-type { display: none; }
+  #user-avatar-wrap { display: none; }
+
+  /* Tag bar: hide inline, replaced by popover */
+  .tag-bar { display: none !important; }
+
+  /* Mobile tag popover */
+  #mobile-tag-popover {
+    position: fixed; top: 52px; left: 8px; right: 8px;
+    background: var(--surface); border: 1px solid var(--border2);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+    z-index: 400; padding: 10px; display: none;
+    flex-wrap: wrap; gap: 6px; max-height: 45vh; overflow-y: auto;
+  }
+  #mobile-tag-popover.open { display: flex; }
+
+  /* Search: full-width overlay on mobile */
+  .search-wrap { display: none !important; }
+  #mobile-search-overlay {
+    position: fixed; inset: 0; top: 48px; background: var(--surface);
+    z-index: 350; display: none; flex-direction: column;
+    border-top: 1px solid var(--border);
+  }
+  #mobile-search-overlay.open { display: flex; }
+  #mobile-search-overlay .mobile-search-inner {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+  }
+  #mobile-search-overlay input {
+    flex: 1; border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 8px 12px; font-size: 15px; font-family: var(--font-sans);
+    color: var(--text); background: var(--surface2); outline: none;
+  }
+  #mobile-search-overlay .mobile-search-cancel {
+    font-size: 14px; color: var(--accent); background: none; border: none;
+    cursor: pointer; padding: 4px 8px; font-family: var(--font-sans); white-space: nowrap;
+  }
+  #mobile-search-results { flex: 1; overflow-y: auto; padding: 6px; }
+
+  /* Article list: hide tags and date, show only title+dot */
+  .article-date { display: none; }
+  .article-tags { display: none; }
+  .article-title { font-size: 14px; }
+
+  /* ── Reading modal mobile ── */
+  /* Toolbar: fixed at top so it doesn't eat layout space when visible */
+  .modal-overlay {
+    overflow-y: auto;
+  }
+  .reading-toolbar-wrap {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 220;
+    /* transition height for collapse */
+  }
+  .reading-toolbar {
+    height: 44px;
+    overflow-x: auto; overflow-y: hidden;
+    transition: height 0.22s ease, opacity 0.22s ease, border-color 0.22s ease;
+  }
   .reading-toolbar::-webkit-scrollbar { height: 0; }
+  /* Override desktop transform-based collapse; use height instead */
+  .reading-toolbar.collapsed {
+    height: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transform: none !important;
+    border-bottom-color: transparent !important;
+  }
+  /* TTS progress stays visible */
+  .tts-progress { position: relative; }
+
+  /* Dropdowns should still appear from top of screen */
+  .tb-dropdown { top: 44px; }
+
+  /* Offset for fixed toolbar — use padding so content starts below toolbar */
+  #reading-modal .reading-title-bar { margin-top: 44px; }
+  /* When toolbar is collapsed, no offset needed — but we keep it for layout consistency */
+
+  /* Title bar */
+  .reading-title-bar { padding: 12px 16px 10px; }
+  .reading-title-input { font-size: 18px; }
+
+  /* Body+notes: stack vertically, scroll with page */
+  .reading-body-wrap {
+    flex-direction: column;
+    overflow: visible;
+    height: auto;
+    flex: none;
+  }
+  .reading-body-pane {
+    overflow-y: visible;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 16px;
+    flex: none;
+    min-height: unset;
+    height: auto;
+  }
+  .reading-notes-pane {
+    width: 100% !important;
+    overflow-y: visible;
+    height: auto;
+    min-height: 160px;
+    padding: 16px;
+    flex-shrink: 0;
+  }
+  .reading-notes-pane.hidden {
+    width: 100% !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
+  .notes-pane-textarea { min-height: 120px; resize: vertical; }
+
+  /* Tap hint */
+  #reading-tap-hint {
+    position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+    background: rgba(26,25,22,0.55); color: #fff; border-radius: 20px;
+    padding: 5px 14px; font-size: 11px; pointer-events: none;
+    opacity: 0; transition: opacity 0.3s; z-index: 230;
+    font-family: var(--font-sans); white-space: nowrap;
+  }
+  #reading-tap-hint.visible { opacity: 1; }
 }
+
 </style>
 </head>
 <body>
@@ -940,6 +1061,22 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 <!-- Highlight tooltip -->
 <div class="highlight-tooltip" id="highlight-tooltip"></div>
 
+<!-- Mobile tag popover -->
+<div id="mobile-tag-popover"></div>
+
+<!-- Mobile search overlay -->
+<div id="mobile-search-overlay">
+  <div class="mobile-search-inner">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px;color:var(--text3);flex-shrink:0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input id="mobile-search-input" placeholder="搜尋標題、內文…" oninput="filterArticlesMobile()" autocomplete="off" />
+    <button class="mobile-search-cancel" onclick="closeMobileSearch()">取消</button>
+  </div>
+  <div id="mobile-search-results"></div>
+</div>
+
+<!-- Reading tap hint (mobile) -->
+<div id="reading-tap-hint">點擊畫面顯示工具列</div>
+
 <!-- API Key modal -->
 <div class="apikey-modal" id="apikey-modal">
   <div class="apikey-card">
@@ -1124,13 +1261,7 @@ function renderTagBar() {
   if (tagToggleBtn) tagToggleBtn.classList.toggle('active', prev !== '__all__' || bar.classList.contains('open'));
 }
 
-window.toggleTagBar = () => {
-  const bar = document.getElementById('tag-bar');
-  const btn = document.getElementById('tag-toggle-btn');
-  const isOpen = bar.classList.contains('open');
-  bar.classList.toggle('open', !isOpen);
-  btn.classList.toggle('active', !isOpen);
-};
+// toggleTagBar is defined below (mobile-aware version)
 
 window.filterTag = (el) => {
   document.querySelectorAll('.tag-pill').forEach(p => p.classList.remove('active'));
@@ -1401,7 +1532,13 @@ window.closeReading = () => {
     if (banner) banner.style.display = 'none';
     hideHighlightConfirmBar();
   }
-  document.getElementById('reading-modal').classList.remove('open');
+  // Reset mobile title bar margin
+  const titleBar = document.getElementById('reading-title-bar');
+  if (titleBar) titleBar.style.marginTop = '';
+  clearTimeout(toolbarCollapseTimer);
+  const modal = document.getElementById('reading-modal');
+  modal.scrollTop = 0;
+  modal.classList.remove('open');
   document.getElementById('highlight-menu').style.display = 'none';
   closeTbDropdowns();
   stopTTS();
@@ -1830,16 +1967,40 @@ function stopTTS() {
 function setupMobileToolbar() {
   if (!isMobile()) return;
   const toolbar = document.getElementById('reading-toolbar');
+  const titleBar = document.getElementById('reading-title-bar');
+  const hint = document.getElementById('reading-tap-hint');
   clearTimeout(toolbarCollapseTimer);
   toolbar.classList.remove('collapsed');
+  if (titleBar) titleBar.style.marginTop = '44px';
+  if (hint) hint.classList.remove('visible');
+
+  const collapseToolbar = () => {
+    toolbar.classList.add('collapsed');
+    if (titleBar) titleBar.style.marginTop = '0';
+    // Show tap hint briefly
+    if (hint) {
+      hint.classList.add('visible');
+      setTimeout(() => hint.classList.remove('visible'), 1800);
+    }
+  };
+
   const resetTimer = () => {
     clearTimeout(toolbarCollapseTimer);
     toolbar.classList.remove('collapsed');
-    toolbarCollapseTimer = setTimeout(() => toolbar.classList.add('collapsed'), 3000);
+    if (titleBar) titleBar.style.marginTop = '44px';
+    if (hint) hint.classList.remove('visible');
+    toolbarCollapseTimer = setTimeout(collapseToolbar, 3500);
   };
+
   const modal = document.getElementById('reading-modal');
-  modal.addEventListener('touchstart', resetTimer, {passive: true});
-  modal.addEventListener('scroll', resetTimer, {passive: true});
+  if (!modal._mobileListenerSet) {
+    modal._mobileListenerSet = true;
+    modal.addEventListener('touchstart', resetTimer, {passive: true});
+    modal.addEventListener('click', e => {
+      if (e.target.closest('.reading-toolbar-wrap') || e.target.closest('.tb-dropdown')) return;
+      resetTimer();
+    }, {passive: true});
+  }
   resetTimer();
 }
 
@@ -2177,6 +2338,10 @@ window.saveFolderModal = async () => {
 
 // ── Search ──
 window.toggleSearch = () => {
+  if (isMobile()) {
+    openMobileSearch();
+    return;
+  }
   searchOpen = !searchOpen;
   const wrap = document.getElementById('search-wrap');
   const btn = document.getElementById('search-btn');
@@ -2185,6 +2350,105 @@ window.toggleSearch = () => {
   if (searchOpen) setTimeout(() => document.getElementById('search-input').focus(), 250);
   else { document.getElementById('search-input').value = ''; renderArticleList(); }
 };
+
+function openMobileSearch() {
+  const overlay = document.getElementById('mobile-search-overlay');
+  overlay.classList.add('open');
+  setTimeout(() => document.getElementById('mobile-search-input').focus(), 100);
+}
+
+window.closeMobileSearch = () => {
+  const overlay = document.getElementById('mobile-search-overlay');
+  overlay.classList.remove('open');
+  document.getElementById('mobile-search-input').value = '';
+  renderArticleList(); // reset
+};
+
+window.filterArticlesMobile = () => {
+  const q = document.getElementById('mobile-search-input').value.trim().toLowerCase();
+  const results = document.getElementById('mobile-search-results');
+  if (!q) { results.innerHTML = ''; return; }
+  const matched = articles.filter(a =>
+    a.title?.toLowerCase().includes(q) || a.body?.toLowerCase().includes(q)
+  );
+  if (matched.length === 0) {
+    results.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">沒有找到相關文章</div>`;
+    return;
+  }
+  results.innerHTML = '';
+  matched.forEach(art => {
+    const row = document.createElement('div');
+    row.className = 'article-row';
+    row.style.cssText = 'padding:10px 14px;';
+    row.innerHTML = `<span class="article-title" style="font-size:14px">${escHtml(art.title||'未命名')}</span>`;
+    row.onclick = () => { closeMobileSearch(); openReading(art.id); };
+    results.appendChild(row);
+  });
+};
+
+// ── Mobile tag popover ──
+window.toggleTagBar = () => {
+  if (isMobile()) {
+    toggleMobileTagPopover();
+    return;
+  }
+  // Desktop: original behaviour
+  const bar = document.getElementById('tag-bar');
+  const btn = document.getElementById('tag-toggle-btn');
+  const isOpen = bar.classList.contains('open');
+  bar.classList.toggle('open', !isOpen);
+  btn.classList.toggle('active', !isOpen);
+};
+
+function toggleMobileTagPopover() {
+  const pop = document.getElementById('mobile-tag-popover');
+  const btn = document.getElementById('tag-toggle-btn');
+  const isOpen = pop.classList.contains('open');
+  pop.classList.toggle('open', !isOpen);
+  btn.classList.toggle('active', !isOpen);
+  if (!isOpen) renderMobileTagPopover();
+}
+
+function renderMobileTagPopover() {
+  const pop = document.getElementById('mobile-tag-popover');
+  pop.innerHTML = '';
+  const allTags = new Set();
+  articles.forEach(a => (a.tags||[]).forEach(t => allTags.add(t)));
+  // All button
+  const allBtn = document.createElement('button');
+  allBtn.className = 'tag-pill' + (activeTag === '__all__' ? ' active' : '');
+  allBtn.textContent = '全部';
+  allBtn.onclick = () => { filterTagMobile('__all__'); };
+  pop.appendChild(allBtn);
+  [...allTags].sort().forEach(tag => {
+    const btn = document.createElement('button');
+    btn.className = 'tag-pill' + (activeTag === tag ? ' active' : '');
+    btn.textContent = tag;
+    btn.onclick = () => filterTagMobile(tag);
+    pop.appendChild(btn);
+  });
+}
+
+function filterTagMobile(tag) {
+  activeTag = tag;
+  renderArticleList();
+  const pop = document.getElementById('mobile-tag-popover');
+  pop.classList.remove('open');
+  document.getElementById('tag-toggle-btn').classList.remove('active');
+  // Update desktop pills too (keeps state consistent)
+  document.querySelectorAll('.tag-pill').forEach(p => p.classList.toggle('active', p.dataset.tag === tag));
+}
+
+// Close mobile popover on outside tap
+document.addEventListener('click', e => {
+  const pop = document.getElementById('mobile-tag-popover');
+  if (pop && pop.classList.contains('open')) {
+    if (!e.target.closest('#mobile-tag-popover') && !e.target.closest('#tag-toggle-btn')) {
+      pop.classList.remove('open');
+      document.getElementById('tag-toggle-btn').classList.remove('active');
+    }
+  }
+});
 
 // ── Gemini ──
 async function callGemini(prompt) {
