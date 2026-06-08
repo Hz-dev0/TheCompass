@@ -735,7 +735,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
     width: 100% !important;
     overflow-y: visible;
     height: auto;
-    min-height: 160px;
+    min-height: 220px;
     padding: 16px;
     flex-shrink: 0;
   }
@@ -746,9 +746,9 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
     padding: 0 !important;
     overflow: hidden !important;
   }
-  .notes-pane-textarea { min-height: 120px; resize: vertical; }
+  .notes-pane-textarea { min-height: 200px; resize: vertical; font-size: 16px; line-height: 1.8; padding: 14px; }
 
-  /* Tap hint */
+  .notes-pane-label { font-size: 13px; }
   #reading-tap-hint {
     position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
     background: rgba(26,25,22,0.55); color: #fff; border-radius: 20px;
@@ -1457,8 +1457,8 @@ function renderArticleList() {
       row.classList.add('drag-dragging');
     });
     row.addEventListener('dragend', () => row.classList.remove('drag-dragging'));
-    // Hover highlight tooltip
-    if (art.highlight) {
+    // Hover highlight tooltip (desktop only)
+    if (art.highlight && !isMobile()) {
       row.addEventListener('mouseenter', e => showHighlightTooltip(e, art.highlight));
       row.addEventListener('mousemove', e => moveHighlightTooltip(e));
       row.addEventListener('mouseleave', hideHighlightTooltip);
@@ -1503,7 +1503,8 @@ window.openReading = (id) => {
   highlightState = 'off';
   pendingHighlightText = '';
   titleBarVisible = true;
-  notesVisible = true;
+  // On mobile, default notes to hidden; on desktop keep visible
+  notesVisible = !isMobile();
   const banner = document.getElementById('highlight-mode-banner');
   if (banner) banner.style.display = 'none';
   hideHighlightConfirmBar();
@@ -1511,9 +1512,11 @@ window.openReading = (id) => {
   if (hlBtn) hlBtn.classList.remove('active');
   document.getElementById('reading-modal').classList.add('open');
   document.getElementById('tb-md-btn').classList.remove('active');
-  document.getElementById('tb-notes-btn').classList.add('active');
+  document.getElementById('tb-notes-btn').classList.toggle('active', notesVisible);
   document.getElementById('reading-title-bar').classList.remove('collapsed');
-  document.getElementById('reading-notes-pane').classList.remove('hidden');
+  const notesPane = document.getElementById('reading-notes-pane');
+  notesPane.classList.toggle('hidden', !notesVisible);
+  document.getElementById('reading-body-pane').classList.toggle('full', !notesVisible);
   document.getElementById('tb-collapse-btn').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="18 15 12 9 6 15"/></svg>`;
   renderReadingPage(art);
   stopTTS();
@@ -1999,6 +2002,32 @@ function setupMobileToolbar() {
     modal.addEventListener('click', e => {
       if (e.target.closest('.reading-toolbar-wrap') || e.target.closest('.tb-dropdown')) return;
       resetTimer();
+    }, {passive: true});
+
+    // Swipe-back gesture (edge swipe from left or right → close reading)
+    let swipeTouchStartX = null;
+    let swipeTouchStartY = null;
+    modal.addEventListener('touchstart', e => {
+      const t = e.touches[0];
+      swipeTouchStartX = t.clientX;
+      swipeTouchStartY = t.clientY;
+    }, {passive: true});
+    modal.addEventListener('touchend', e => {
+      if (swipeTouchStartX === null) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - swipeTouchStartX;
+      const dy = t.clientY - swipeTouchStartY;
+      // Edge swipe: started within 30px of left or right edge, horizontal > 60px, more horizontal than vertical
+      const startedAtLeftEdge = swipeTouchStartX < 30;
+      const startedAtRightEdge = swipeTouchStartX > window.innerWidth - 30;
+      const isHorizontal = Math.abs(dx) > Math.abs(dy) * 1.5;
+      const swipedRight = dx > 60 && startedAtLeftEdge;
+      const swipedLeft = dx < -60 && startedAtRightEdge;
+      if (isHorizontal && (swipedRight || swipedLeft)) {
+        closeReading();
+      }
+      swipeTouchStartX = null;
+      swipeTouchStartY = null;
     }, {passive: true});
   }
   resetTimer();
