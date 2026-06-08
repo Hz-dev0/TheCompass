@@ -172,7 +172,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 
 /* ── Reading modal ── */
 .modal-overlay {
-  position: fixed; inset: 0; background: rgba(247,246,242,0.95);
+  position: fixed; inset: 0; background: var(--bg);
   z-index: 200; display: none; flex-direction: column;
   animation: fadeIn 0.15s ease;
 }
@@ -552,8 +552,12 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 }
 .passcode-code:hover { background: var(--accent); color: #fff; }
 
-/* Sync indicator in reading toolbar */
-#sync-indicator { display: none; align-items: center; }
+/* Sync indicator - floats in center of reading toolbar */
+#sync-indicator {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  display: none; align-items: center; pointer-events: none;
+  z-index: 5;
+}
 #sync-indicator.syncing { display: flex; }
 #sync-indicator.saved { display: flex; }
 #sync-indicator.error { display: flex; }
@@ -729,6 +733,8 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   <!-- Toolbar wrap (for positioning dropdowns) -->
   <div class="reading-toolbar-wrap">
     <div class="reading-toolbar" id="reading-toolbar">
+      <!-- Sync indicator floats center -->
+      <span id="sync-indicator" title="同步狀態"></span>
       <!-- Left side -->
       <button class="tb-btn" onclick="closeReading()" title="返回">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
@@ -759,7 +765,6 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
       <button class="tb-btn" id="tb-collapse-btn" onclick="toggleTitleBar()" title="摺疊標題">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="18 15 12 9 6 15"/></svg>
       </button>
-      <span id="sync-indicator" title="同步狀態" style="margin-right:2px"></span>
       <div class="tb-sep"></div>
       <button class="tb-btn" style="color:var(--danger)" onclick="deleteCurrentArticle()" title="刪除">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
@@ -974,7 +979,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 </div>
 
 <!-- Highlight mode indicator -->
-<div id="highlight-mode-banner" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:800;background:var(--accent);color:#fff;padding:4px 16px;border-radius:0 0 8px 8px;font-size:12px;display:none;pointer-events:none">🪄 Highlight 模式 — 選取文字即標記重點</div>
+<div id="highlight-mode-banner" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:800;background:var(--accent);color:#fff;padding:4px 16px;border-radius:0 0 8px 8px;font-size:12px;display:none;pointer-events:none">🪄 Highlight 模式 — 在文章中選取文字，確認後標記黃底</div>
 
 <!-- Firebase + App Script -->
 <script type="module">
@@ -1013,6 +1018,8 @@ let currentArticleId = null;
 let mdMode = false;
 let newMdMode = false;
 let highlightMode = false;
+let highlightState = 'off'; // 'off' | 'selecting' | 'confirming'
+let pendingHighlightText = '';
 let searchOpen = false;
 let saveTimeout = null;
 let selectionRange = null;
@@ -1362,10 +1369,13 @@ window.openReading = (id) => {
   currentArticleId = id;
   mdMode = false;
   highlightMode = false;
+  highlightState = 'off';
+  pendingHighlightText = '';
   titleBarVisible = true;
   notesVisible = true;
   const banner = document.getElementById('highlight-mode-banner');
   if (banner) banner.style.display = 'none';
+  hideHighlightConfirmBar();
   const hlBtn = document.getElementById('tb-highlight-btn');
   if (hlBtn) hlBtn.classList.remove('active');
   document.getElementById('reading-modal').classList.add('open');
@@ -1381,6 +1391,16 @@ window.openReading = (id) => {
 };
 
 window.closeReading = () => {
+  // Clean up highlight mode if active
+  if (highlightState !== 'off') {
+    highlightState = 'off';
+    pendingHighlightText = '';
+    const btn = document.getElementById('tb-highlight-btn');
+    if (btn) btn.classList.remove('active');
+    const banner = document.getElementById('highlight-mode-banner');
+    if (banner) banner.style.display = 'none';
+    hideHighlightConfirmBar();
+  }
   document.getElementById('reading-modal').classList.remove('open');
   document.getElementById('highlight-menu').style.display = 'none';
   closeTbDropdowns();
@@ -1479,7 +1499,7 @@ function renderBodyPane(art) {
       const safeRe = hEsc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       html = html.replace(new RegExp(safeRe, 'g'), `<mark>${hEsc}</mark>`);
     }
-    const cls = 'art-body-rendered' + (highlightMode ? ' highlight-mode' : '');
+    const cls = 'art-body-rendered' + (highlightState !== 'off' ? ' highlight-mode' : '');
     pane.innerHTML = `<div class="${cls}" id="body-rendered">${html}</div>`;
   }
 }
@@ -1824,48 +1844,94 @@ function setupMobileToolbar() {
 }
 
 // ── Highlight mode ──
+// State: 'off' | 'selecting' | 'confirming'
+
 window.toggleHighlightMode = () => {
-  highlightMode = !highlightMode;
+  if (highlightState !== 'off') {
+    // Already active — cancel
+    exitHighlightMode();
+    return;
+  }
+  highlightState = 'selecting';
   const btn = document.getElementById('tb-highlight-btn');
-  if (btn) btn.classList.toggle('active', highlightMode);
+  if (btn) btn.classList.add('active');
   const banner = document.getElementById('highlight-mode-banner');
-  if (banner) banner.style.display = highlightMode ? 'block' : 'none';
-  // re-render body to apply/remove cursor class
+  if (banner) banner.style.display = 'block';
+  // Apply highlight-mode cursor/selection style
   const art = articles.find(a => a.id === currentArticleId);
   if (art && !mdMode) renderBodyPane(art);
+};
+
+window.exitHighlightMode = function exitHighlightMode() {
+  highlightState = 'off';
+  pendingHighlightText = '';
+  const btn = document.getElementById('tb-highlight-btn');
+  if (btn) btn.classList.remove('active');
+  const banner = document.getElementById('highlight-mode-banner');
+  if (banner) banner.style.display = 'none';
+  hideHighlightConfirmBar();
+  window.getSelection()?.removeAllRanges();
+  const art = articles.find(a => a.id === currentArticleId);
+  if (art && !mdMode) renderBodyPane(art);
+}
+
+function showHighlightConfirmBar(text) {
+  let bar = document.getElementById('hl-confirm-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'hl-confirm-bar';
+    bar.style.cssText = `
+      position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+      z-index:800; background:var(--text); color:#fff;
+      border-radius:20px; padding:8px 16px; font-size:13px;
+      display:flex; align-items:center; gap:10px;
+      box-shadow:var(--shadow-lg); font-family:var(--font-sans);
+      white-space:nowrap; max-width:90vw;
+    `;
+    document.body.appendChild(bar);
+  }
+  const snippet = text.length > 28 ? text.slice(0,28) + '…' : text;
+  bar.innerHTML = `
+    <span style="color:var(--highlight-border);font-size:14px">🪄</span>
+    <span style="opacity:.75;font-size:12px;overflow:hidden;text-overflow:ellipsis;max-width:180px">"${escHtml(snippet)}"</span>
+    <button onclick="confirmHighlight()" style="background:var(--accent);color:#fff;border:none;border-radius:12px;padding:4px 12px;font-size:12px;cursor:pointer;font-family:var(--font-sans)">✓ 確認</button>
+    <button onclick="exitHighlightMode()" style="background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:12px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:var(--font-sans)">✕</button>
+  `;
+  bar.style.display = 'flex';
+}
+
+function hideHighlightConfirmBar() {
+  const bar = document.getElementById('hl-confirm-bar');
+  if (bar) bar.style.display = 'none';
+}
+
+window.confirmHighlight = async () => {
+  if (!pendingHighlightText || !currentArticleId) return;
+  const text = pendingHighlightText;
+  exitHighlightMode();
+  await updateDoc(doc(db, 'articles', currentArticleId), { highlight: text });
+  const art = articles.find(a => a.id === currentArticleId);
+  if (art) { art.highlight = text; renderBodyPane(art); }
+  showToast('Highlight 已儲存 🪄');
 };
 
 document.addEventListener('mouseup', (e) => {
   const modal = document.getElementById('reading-modal');
   if (!modal.classList.contains('open')) return;
   if (mdMode) return;
+  if (highlightState !== 'selecting') return;
   const sel = window.getSelection();
   const text = sel?.toString().trim();
-  if (!text || text.length < 3) {
-    document.getElementById('highlight-menu').style.display = 'none';
+  if (!text || text.length < 2) {
+    hideHighlightConfirmBar();
     return;
   }
-  selectionRange = sel.getRangeAt(0);
-  const rect = sel.getRangeAt(0).getBoundingClientRect();
-  const menu = document.getElementById('highlight-menu');
-  // Only show menu in highlight mode OR if the element is inside body-rendered
-  if (!highlightMode && !e.target.closest('#body-rendered')) return;
-  menu.style.display = 'flex';
-  menu.style.left = rect.left + rect.width/2 - 60 + 'px';
-  menu.style.top = rect.top - 40 + 'px';
+  // Only accept selections inside the body rendered area
+  if (!e.target.closest('#body-rendered')) return;
+  pendingHighlightText = text;
+  highlightState = 'confirming';
+  showHighlightConfirmBar(text);
 });
-
-window.applyHighlight = async () => {
-  const sel = window.getSelection();
-  const text = sel?.toString().trim();
-  if (!text || !currentArticleId) return;
-  document.getElementById('highlight-menu').style.display = 'none';
-  sel.removeAllRanges();
-  await updateDoc(doc(db, 'articles', currentArticleId), { highlight: text });
-  const art = articles.find(a => a.id === currentArticleId);
-  if (art) { art.highlight = text; renderBodyPane(art); }
-  showToast('Highlight 已儲存 🪄');
-};
 
 // ── Delete ──
 window.deleteCurrentArticle = async () => {
