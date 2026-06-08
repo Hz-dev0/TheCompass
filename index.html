@@ -1395,7 +1395,7 @@ function renderMarkdown(text) {
   let inPre = false;
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
-    if (line.startsWith('```')) { inPre = !inPre; result += inPre ? '<pre><code>' : '</code></pre>\n'; continue; }
+    if (line.startsWith('\x60\x60\x60')) { inPre = !inPre; result += inPre ? '<pre><code>' : '</code></pre>\n'; continue; }
     if (inPre) { result += escHtml(line) + '\n'; continue; }
     // headings
     if (/^### /.test(line)) { result += '<h3>' + inlineMarkdown(line.slice(4)) + '</h3>\n'; continue; }
@@ -1422,7 +1422,7 @@ function inlineMarkdown(text) {
   return escHtml(text)
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`(.+?)`/g, '<code>$1</code>')
+    .replace(/\x60(.+?)\x60/g, '<code>$1</code>')
     .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank">$1</a>');
 }
 
