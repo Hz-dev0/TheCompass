@@ -681,7 +681,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   /* ── Reading modal mobile ── */
   /* Toolbar: fixed at top so it doesn't eat layout space when visible */
   .modal-overlay {
-    overflow-y: auto;
+    overflow: hidden;
   }
   .reading-toolbar-wrap {
     position: fixed; top: 0; left: 0; right: 0; z-index: 220;
@@ -715,38 +715,39 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   .reading-title-bar { padding: 12px 16px 10px; }
   .reading-title-input { font-size: 18px; }
 
-  /* Body+notes: stack vertically, scroll with page */
+  /* Body+notes: fixed split, both panes scroll independently */
   .reading-body-wrap {
     flex-direction: column;
-    overflow: visible;
-    height: auto;
-    flex: none;
+    overflow: hidden;
+    flex: 1;
   }
   .reading-body-pane {
-    overflow-y: visible;
+    overflow-y: auto;
     border-right: none;
     border-bottom: 1px solid var(--border);
     padding: 16px;
-    flex: none;
-    min-height: unset;
-    height: auto;
+    flex: 1;
+    min-height: 0;
+  }
+  /* Notes hidden: body takes full space */
+  .reading-body-pane.full {
+    flex: 1;
   }
   .reading-notes-pane {
     width: 100% !important;
-    overflow-y: visible;
-    height: auto;
-    min-height: 220px;
-    padding: 16px;
+    overflow-y: auto;
     flex-shrink: 0;
+    height: 42vh;
+    min-height: 0;
+    padding: 16px;
   }
   .reading-notes-pane.hidden {
-    width: 100% !important;
     height: 0 !important;
     min-height: 0 !important;
     padding: 0 !important;
     overflow: hidden !important;
   }
-  .notes-pane-textarea { min-height: 200px; resize: vertical; font-size: 16px; line-height: 1.8; padding: 14px; }
+  .notes-pane-textarea { min-height: 0; height: 100%; resize: none; font-size: 16px; line-height: 1.8; padding: 14px; }
 
   .notes-pane-label { font-size: 13px; }
   #reading-tap-hint {
@@ -1188,10 +1189,6 @@ onAuthStateChanged(auth, user => {
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app').classList.add('visible');
     renderUserAvatar();
-    // Check if Gemini key is set - prompt via settings (skippable)
-    if (!localStorage.getItem('gemini_key')) {
-      setTimeout(() => openSettings('apikey'), 800);
-    }
     subscribeData();
   } else {
     currentUser = null;
