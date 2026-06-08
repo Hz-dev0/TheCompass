@@ -552,11 +552,38 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 }
 .passcode-code:hover { background: var(--accent); color: #fff; }
 
-/* Sync indicator animation */
-@keyframes syncPulse { 0%,100%{opacity:1} 50%{opacity:.3} }
-#sync-indicator.syncing { background: var(--accent2); animation: syncPulse 1s ease infinite; }
-#sync-indicator.saved { background: var(--accent); }
-#sync-indicator.error { background: var(--danger); }
+/* Sync indicator in reading toolbar */
+#sync-indicator { display: none; align-items: center; }
+#sync-indicator.syncing { display: flex; }
+#sync-indicator.saved { display: flex; }
+#sync-indicator.error { display: flex; }
+
+.looping-rhombuses-spinner, .looping-rhombuses-spinner * { box-sizing: border-box; }
+.looping-rhombuses-spinner {
+  width: calc(8px * 4); height: 8px; position: relative; display: inline-block;
+}
+.looping-rhombuses-spinner .rhombus {
+  height: 8px; width: 8px; background-color: var(--accent2);
+  left: calc(8px * 4); position: absolute; margin: 0 auto;
+  border-radius: 2px; transform: translateY(0) rotate(45deg) scale(0);
+  animation: looping-rhombuses-spinner-animation 2500ms linear infinite;
+}
+.looping-rhombuses-spinner .rhombus:nth-child(1) { animation-delay: calc(2500ms * 1 / -1.5); }
+.looping-rhombuses-spinner .rhombus:nth-child(2) { animation-delay: calc(2500ms * 2 / -1.5); }
+.looping-rhombuses-spinner .rhombus:nth-child(3) { animation-delay: calc(2500ms * 3 / -1.5); }
+@keyframes looping-rhombuses-spinner-animation {
+  0% { transform: translateX(0) rotate(45deg) scale(0); }
+  50% { transform: translateX(-233%) rotate(45deg) scale(1); }
+  100% { transform: translateX(-466%) rotate(45deg) scale(0); }
+}
+.sync-saved-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  animation: syncFadeOut 2s ease forwards;
+}
+@keyframes syncFadeOut { 0%,70%{opacity:1} 100%{opacity:0} }
+.sync-error-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--danger);
+}
 
 /* Tag bar open state */
 .tag-bar.open { display:flex !important; max-width:600px !important; overflow-x:auto; }
@@ -640,7 +667,6 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   <!-- Topbar -->
   <div class="topbar">
     <span class="topbar-logo">收集冊</span>
-    <span id="sync-indicator" title="同步狀態" style="width:7px;height:7px;border-radius:50%;background:var(--border2);display:inline-block;flex-shrink:0;transition:background 0.3s"></span>
     <div class="topbar-sep"></div>
 
     <!-- Folder toggle -->
@@ -651,16 +677,15 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
     <div class="topbar-sep"></div>
 
     <!-- Tag button + pills -->
-    <button class="icon-btn" id="tag-toggle-btn" title="標籤篩選" onclick="toggleTagBar()" style="flex-shrink:0">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-      TAG
+    <button class="icon-btn" id="tag-toggle-btn" title="標籤篩選" onclick="toggleTagBar()" style="flex-shrink:0;font-size:15px;border:none;background:transparent;padding:0 4px">
+      🏷️
     </button>
     <div class="tag-bar" id="tag-bar" style="display:none;max-width:0;overflow:hidden;transition:max-width 0.25s ease">
       <button class="tag-pill active" data-tag="__all__" onclick="filterTag(this)">全部</button>
     </div>
 
     <!-- Actions -->
-    <div class="topbar-actions">
+    <div class="topbar-actions" style="margin-left:auto">
       <!-- Search -->
       <div class="search-wrap" id="search-wrap">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:14px;height:14px;color:var(--text3)"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -734,6 +759,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
       <button class="tb-btn" id="tb-collapse-btn" onclick="toggleTitleBar()" title="摺疊標題">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="18 15 12 9 6 15"/></svg>
       </button>
+      <span id="sync-indicator" title="同步狀態" style="margin-right:2px"></span>
       <div class="tb-sep"></div>
       <button class="tb-btn" style="color:var(--danger)" onclick="deleteCurrentArticle()" title="刪除">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
@@ -1049,15 +1075,9 @@ function subscribeData() {
   onSnapshot(query(collection(db, 'articles'), where('uid','==',uid)), snap => {
     articles = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     articles.sort((a,b) => {
-      // pinned > favorite > 已閱 > 待閱
-      const rank = item => {
-        if (item.pinned) return 0;
-        if (item.favorite) return 1;
-        if (item.readStatus === 'done') return 2;
-        return 3;
-      };
-      const ra = rank(a), rb = rank(b);
-      if (ra !== rb) return ra - rb;
+      // pinned > rest (by time)
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
       return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
     });
     renderTagBar();
@@ -1139,12 +1159,28 @@ function renderFolderTree() {
   });
   tree.appendChild(allItem);
 
-  // 未分類 (virtual folder)
+  // 未分類 (filter only – not a folder, no nesting)
   const uncatCount = articles.filter(a => !a.folderId).length;
   const uncatItem = document.createElement('div');
   uncatItem.className = 'folder-item' + (currentFolderId === '__uncat__' ? ' active' : '');
   uncatItem.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg> 未分類 <span class="count">${uncatCount}</span>`;
-  uncatItem.onclick = () => { currentFolderId = '__uncat__'; currentFolderPath = [{id:'__uncat__', name:'未分類'}]; renderFolderTree(); renderArticleList(); };
+  uncatItem.onclick = () => {
+    // Toggle: clicking again goes back to all
+    if (currentFolderId === '__uncat__') {
+      currentFolderId = null; currentFolderPath = [];
+    } else {
+      currentFolderId = '__uncat__'; currentFolderPath = [];
+    }
+    renderFolderTree(); renderArticleList();
+  };
+  // Allow dragging articles here to remove folder assignment
+  uncatItem.addEventListener('dragover', e => { e.preventDefault(); uncatItem.classList.add('drag-over'); });
+  uncatItem.addEventListener('dragleave', () => uncatItem.classList.remove('drag-over'));
+  uncatItem.addEventListener('drop', async e => {
+    e.preventDefault(); uncatItem.classList.remove('drag-over');
+    const artId = e.dataTransfer.getData('articleId');
+    if (artId) { await updateDoc(doc(db, 'articles', artId), { folderId: null }); showToast('已移至未分類'); }
+  });
   tree.appendChild(uncatItem);
 
   // Back button if inside folder
@@ -1438,8 +1474,10 @@ function renderBodyPane(art) {
   } else {
     let html = renderMarkdown(art.body||'');
     if (art.highlight) {
+      // Escape highlight text for safe regex, then find it in the rendered HTML (which has escaped entities)
       const hEsc = escHtml(art.highlight);
-      html = html.replace(hEsc, `<mark>${hEsc}</mark>`);
+      const safeRe = hEsc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      html = html.replace(new RegExp(safeRe, 'g'), `<mark>${hEsc}</mark>`);
     }
     const cls = 'art-body-rendered' + (highlightMode ? ' highlight-mode' : '');
     pane.innerHTML = `<div class="${cls}" id="body-rendered">${html}</div>`;
@@ -1480,7 +1518,7 @@ window.scheduleFieldSave = (field, value) => {
       await updateDoc(doc(db, 'articles', currentArticleId), { [field]: value });
       setSyncStatus('saved');
     } catch(e) { setSyncStatus('error'); }
-  }, 800);
+  }, 2500);
 };
 
 window.scheduleNotesSave = (value) => {
@@ -1495,16 +1533,26 @@ window.scheduleNotesSave = (value) => {
       const ts = document.getElementById('notes-timestamp');
       if (ts) ts.textContent = '剛剛編輯';
     } catch(e) { setSyncStatus('error'); }
-  }, 800);
+  }, 2500);
 };
 
 function setSyncStatus(status) {
   const el = document.getElementById('sync-indicator');
   if (!el) return;
-  el.className = '';
-  if (status === 'syncing') { el.classList.add('syncing'); el.title = '同步中…'; }
-  else if (status === 'saved') { el.classList.add('saved'); el.title = '已儲存'; setTimeout(()=>el.className='',2500); }
-  else if (status === 'error') { el.classList.add('error'); el.title = '儲存失敗'; }
+  if (status === 'syncing') {
+    el.className = 'syncing';
+    el.innerHTML = `<div class="looping-rhombuses-spinner"><div class="rhombus"></div><div class="rhombus"></div><div class="rhombus"></div></div>`;
+    el.title = '同步中…';
+  } else if (status === 'saved') {
+    el.className = 'saved';
+    el.innerHTML = `<div class="sync-saved-dot"></div>`;
+    el.title = '已儲存';
+    setTimeout(() => { el.className=''; el.innerHTML=''; }, 2500);
+  } else if (status === 'error') {
+    el.className = 'error';
+    el.innerHTML = `<div class="sync-error-dot"></div>`;
+    el.title = '儲存失敗';
+  }
 }
 
 window.toggleReadingMd = () => {
@@ -1654,6 +1702,8 @@ window.toggleReadStatus = async () => {
   if (!art) return;
   const cur = art.readStatus || '';
   const next = (cur === 'done') ? '' : 'done';
+  art.readStatus = next; // optimistic update
+  updateToolbarState(art);
   await updateDoc(doc(db, 'articles', currentArticleId), { readStatus: next });
   showToast(next === 'done' ? '已標記為已閱 ☑️' : '已標記為待閱 🔲');
 };
@@ -1665,6 +1715,8 @@ window.toggleFavorite = async () => {
   const art = articles.find(a => a.id === currentArticleId);
   if (!art) return;
   const newFav = !art.favorite;
+  art.favorite = newFav; // optimistic update
+  updateToolbarState(art);
   await updateDoc(doc(db, 'articles', currentArticleId), { favorite: newFav });
   showToast(newFav ? '已加入收藏 ♥' : '已取消收藏');
 };
@@ -1674,6 +1726,8 @@ window.togglePin = async () => {
   const art = articles.find(a => a.id === currentArticleId);
   if (!art) return;
   const newPinned = !art.pinned;
+  art.pinned = newPinned; // optimistic update
+  updateToolbarState(art);
   await updateDoc(doc(db, 'articles', currentArticleId), { pinned: newPinned });
   showToast(newPinned ? '已置頂 🔺' : '已取消置頂');
 };
@@ -1805,11 +1859,12 @@ window.applyHighlight = async () => {
   const sel = window.getSelection();
   const text = sel?.toString().trim();
   if (!text || !currentArticleId) return;
-  await updateDoc(doc(db, 'articles', currentArticleId), { highlight: text });
   document.getElementById('highlight-menu').style.display = 'none';
+  sel.removeAllRanges();
+  await updateDoc(doc(db, 'articles', currentArticleId), { highlight: text });
   const art = articles.find(a => a.id === currentArticleId);
-  if (art) { art.highlight = text; renderModalContent(art); }
-  showToast('Highlight 已儲存');
+  if (art) { art.highlight = text; renderBodyPane(art); }
+  showToast('Highlight 已儲存 🪄');
 };
 
 // ── Delete ──
@@ -2133,7 +2188,7 @@ function renderSettingsBody() {
       <p style="font-size:13px;color:var(--text2);line-height:1.6">將所有文章匯出為 JSON 檔案，可用於備份或遷移。</p>
       <button class="btn btn-primary" onclick="exportData()">📤 匯出 JSON</button>
       <div class="settings-section-title" style="margin-top:12px">自動儲存說明</div>
-      <p style="font-size:13px;color:var(--text2);line-height:1.6">文章內文與筆記在停止輸入後 <strong>0.8 秒</strong>自動儲存至 Firebase。頂部綠燈亮起表示已儲存。</p>
+      <p style="font-size:13px;color:var(--text2);line-height:1.6">文章內文與筆記在停止輸入後 <strong>2.5 秒</strong>自動儲存至 Firebase。閱讀工具列燈號亮起表示同步中/已儲存。</p>
     `;
     return;
   }
