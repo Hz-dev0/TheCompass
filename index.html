@@ -202,12 +202,25 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   display: inline; vertical-align: baseline;
   text-decoration: underline; text-decoration-color: var(--accent);
   text-underline-offset: 2px; text-decoration-thickness: 1.5px;
+  white-space: inherit;
+}
+/* Search snippet below title */
+.article-snippet {
+  font-size: 11px; color: var(--text3); flex-basis: 100%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 1px; line-height: 1.4; order: 3;
+}
+.article-snippet mark {
+  background: transparent; color: var(--accent2);
+  font-weight: inherit; padding: 0;
+  text-decoration: underline; text-decoration-color: var(--accent2);
+  text-underline-offset: 2px; text-decoration-thickness: 1px;
 }
 
 /* ── Article list ── */
 .article-list { flex: 1; overflow-y: auto; padding: 8px; }
 .article-row {
-  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 2px 8px; padding: 7px 10px;
   border-radius: var(--radius); cursor: pointer; position: relative;
   transition: background var(--transition);
   border: 1px solid transparent;
@@ -393,33 +406,6 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 .folder-modal.open { display: flex; }
 .folder-card { background: var(--surface); border-radius: var(--radius-lg); padding: 24px; width: 320px; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 14px; }
 .folder-card h3 { font-size: 15px; font-weight: 500; }
-
-/* ── API Key modal ── */
-.apikey-modal {
-  position: fixed; inset: 0; z-index: 500; background: rgba(42,26,31,0.5);
-  display: none; align-items: center; justify-content: center;
-}
-.apikey-modal.open { display: flex; }
-.apikey-card {
-  background: var(--surface); border-radius: var(--radius-lg);
-  padding: 28px; width: 400px; max-width: 95vw;
-  box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 16px;
-}
-.apikey-card h3 { font-family: var(--font-serif); font-size: 17px; font-weight: 500; }
-.apikey-card p { font-size: 13px; color: var(--text2); line-height: 1.6; }
-.apikey-card a { color: var(--accent); text-decoration: none; }
-.apikey-card a:hover { text-decoration: underline; }
-.apikey-input-wrap { position: relative; display: flex; align-items: center; }
-.apikey-input-wrap input { padding-right: 36px; }
-.apikey-eye {
-  position: absolute; right: 10px; background: none; border: none;
-  cursor: pointer; color: var(--text3); display: flex; align-items: center;
-}
-.apikey-eye:hover { color: var(--text); }
-.apikey-eye svg { width: 16px; height: 16px; }
-.apikey-status { font-size: 12px; display: flex; align-items: center; gap: 6px; }
-.apikey-status.ok { color: var(--accent); }
-.apikey-status.err { color: var(--danger); }
 
 /* toast */
 .toast {
@@ -978,10 +964,6 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
       </button>
       <button class="tb-btn" id="tb-tts-btn" onclick="toggleTTS()" oncontextmenu="openTTSSpeedMenu(event)" title="朗讀（右鍵調語速）">🔊</button>
       <button class="tb-btn" id="tb-pin-btn" onclick="togglePin()" title="置頂">🔻</button>
-      <button class="tb-btn" id="tb-ai-btn" onclick="runAiAnalysis()" title="AI分析">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="m9 12 2 2 4-4"/></svg>
-        AI
-      </button>
       <button class="tb-btn" id="tb-collapse-btn" onclick="toggleTitleBar()" title="摺疊標題">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="18 15 12 9 6 15"/></svg>
       </button>
@@ -1041,7 +1023,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   <div class="settings-card">
     <div class="settings-tabs">
       <div class="settings-tab active" onclick="switchSettingsTab('tts')">🔊 TTS</div>
-      <div class="settings-tab" onclick="switchSettingsTab('apikey')">🔑 API</div>
+      <div class="settings-tab" onclick="switchSettingsTab('appearance')">🔤 外觀</div>
       <div class="settings-tab" onclick="switchSettingsTab('account')">👤 帳號</div>
       <div class="settings-tab" onclick="switchSettingsTab('export')">📤 匯出</div>
     </div>
@@ -1087,10 +1069,6 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
       </button>
       <div class="tb-spacer"></div>
-      <button class="tb-btn" id="new-ai-btn" onclick="runNewAi()" title="AI分析">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="m9 12 2 2 4-4"/></svg>
-        ✦ AI
-      </button>
       <button class="tb-btn" id="new-md-btn" onclick="toggleNewMd()" title="編輯模式">📝</button>
       <button class="btn btn-primary" id="new-save-btn" onclick="saveNewArticle()" style="height:30px;padding:0 14px;font-size:13px">儲存</button>
     </div>
@@ -1120,19 +1098,6 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   <div class="reading-body-wrap">
     <div class="reading-body-pane" id="new-body-pane">
       <textarea class="art-body-editor" id="new-body" placeholder="貼上文章內文…" style="min-height:300px;height:auto" oninput="this.style.height='auto';this.style.height=Math.max(300,this.scrollHeight)+'px'"></textarea>
-      <div id="new-ai-loading" style="display:none;margin-top:12px" class="ai-loading">
-        <div class="spinner"></div> AI 分析中…
-      </div>
-      <div id="new-ai-section" style="display:none;margin-top:12px">
-        <div class="ai-section">
-          <div class="ai-label">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="m9 12 2 2 4-4"/></svg>
-            AI 建議
-          </div>
-          <div class="ai-summary" id="new-ai-summary"></div>
-          <div class="ai-tags" id="new-ai-tags"></div>
-        </div>
-      </div>
     </div>
     <div class="reading-notes-pane" id="new-notes-pane">
       <div class="notes-pane-label">
@@ -1182,30 +1147,6 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 <!-- Reading tap hint (mobile) -->
 <div id="reading-tap-hint" style="display:none">點擊畫面顯示工具列</div>
 
-<!-- API Key modal -->
-<div class="apikey-modal" id="apikey-modal">
-  <div class="apikey-card">
-    <h3>設定 Gemini API Key</h3>
-    <p>Key 只會存在你的瀏覽器本地（localStorage），不會上傳到任何伺服器。<br>
-    還沒有 Key？<a href="https://aistudio.google.com/app/apikey" target="_blank">前往 Google AI Studio 申請</a></p>
-    <div>
-      <div class="field-label">API Key</div>
-      <div class="apikey-input-wrap">
-        <input class="field-input" id="apikey-input" type="password" placeholder="貼上你的 Gemini API Key…" />
-        <button class="apikey-eye" onclick="toggleKeyVisibility()" title="顯示／隱藏">
-          <svg id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        </button>
-      </div>
-    </div>
-    <div id="apikey-status" class="apikey-status" style="display:none"></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn" id="apikey-skip-btn" onclick="closeApikeyModal(false)">稍後再說</button>
-      <button class="btn" onclick="testGeminiKey()">測試連線</button>
-      <button class="btn btn-primary" onclick="saveApiKey()">儲存</button>
-    </div>
-  </div>
-</div>
-
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -1238,12 +1179,6 @@ const firebaseConfig = {
   appId: "1:130679459961:web:6a2f0fd8e6f4254864c4a8"
 };
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
-function getGeminiUrl() {
-  const key = localStorage.getItem('gemini_key');
-  if (!key) return null;
-  return `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
-}
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
@@ -1618,7 +1553,22 @@ function renderArticleList() {
     } else {
       dotHtml = '<span style="width:7px;height:7px;border-radius:50%;background:var(--border2);flex-shrink:0;display:inline-block" title="待閱"></span>';
     }
-    row.innerHTML = `${dotHtml}<span class="article-title">${titleHtml}</span><div class="article-tags">${tagsHtml}</div><span class="article-date">${dateStr}</span>`;
+    // Body snippet when searching
+    let snippetHtml = '';
+    if (searchQ && art.body) {
+      const bodyLower = art.body.toLowerCase();
+      const idx = bodyLower.indexOf(searchQ.toLowerCase());
+      if (idx !== -1) {
+        const start = Math.max(0, idx - 20);
+        const end = Math.min(art.body.length, idx + searchQ.length + 50);
+        const raw = (start > 0 ? '…' : '') + art.body.slice(start, end) + (end < art.body.length ? '…' : '');
+        const safeQ2 = searchQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const parts2 = raw.split(new RegExp(`(${safeQ2})`, 'gi'));
+        const snippetInner = parts2.map(p => p.toLowerCase() === searchQ.toLowerCase() ? `<mark>${escHtml(p)}</mark>` : escHtml(p)).join('');
+        snippetHtml = `<span class="article-snippet">${snippetInner}</span>`;
+      }
+    }
+    row.innerHTML = `${dotHtml}<span class="article-title">${titleHtml}</span><div class="article-tags">${tagsHtml}</div><span class="article-date">${dateStr}</span>${snippetHtml}`;
     if (art.pinned) row.classList.add('pinned');
     row.onclick = () => openReading(art.id);
     row.addEventListener('dragstart', e => {
@@ -1741,9 +1691,6 @@ function renderReadingPage(art) {
   metaRow.innerHTML = (art.tags||[]).map(t =>
     `<span class="reading-meta-tag" onclick="removeTagFromArticle('${escHtml(t)}')">${escHtml(t)} ×</span>`
   ).join('');
-  if (art.aiSummary) {
-    metaRow.innerHTML += `<span style="font-size:11px;color:var(--text3);margin-left:4px">AI: ${escHtml(art.aiSummary.slice(0,60))}…</span>`;
-  }
   // Body
   renderBodyPane(art);
   // Notes
@@ -1864,6 +1811,13 @@ window.changeFontSize = (delta) => {
   readingFontSize = Math.min(26, Math.max(12, readingFontSize + delta));
   localStorage.setItem('reading_font_size', readingFontSize);
   applyReadingFontSize();
+};
+
+window.applyDefaultFontSize = (size) => {
+  readingFontSize = Math.min(26, Math.max(12, size));
+  localStorage.setItem('reading_font_size', readingFontSize);
+  applyReadingFontSize();
+  showToast('預設字體大小已更新');
 };
 
 window.scheduleFieldSave = (field, value) => {
@@ -2330,33 +2284,6 @@ window.deleteCurrentArticle = async () => {
   showToast('已刪除');
 };
 
-// ── AI in reading ──
-window.runAiAnalysis = async () => {
-  const art = articles.find(a => a.id === currentArticleId);
-  if (!art) return;
-  const btn = document.getElementById('tb-ai-btn');
-  const origHTML = btn.innerHTML;
-  btn.innerHTML = '<div class="spinner"></div>';
-  btn.disabled = true;
-  try {
-    const result = await callGemini(`以下是一篇文章，請用繁體中文：1) 寫一段3句話以內的摘要；2) 建議3-5個標籤（用逗號分隔）。
-格式嚴格如下（不要其他文字）：
-摘要：[摘要]
-標籤：[標籤1, 標籤2, ...]
-
-文章標題：${art.title}
-文章內容：${(art.body||'').slice(0,3000)}`);
-    const summaryMatch = result.match(/摘要：(.+)/);
-    const tagsMatch = result.match(/標籤：(.+)/);
-    const summary = summaryMatch ? summaryMatch[1].trim() : '';
-    const newTags = tagsMatch ? tagsMatch[1].split(',').map(t=>t.trim()).filter(Boolean) : [];
-    await updateDoc(doc(db, 'articles', currentArticleId), { aiSummary: summary, tags: newTags });
-    showToast('AI 分析完成');
-  } catch(e) { showToast('AI 分析失敗：' + e.message); }
-  btn.innerHTML = origHTML;
-  btn.disabled = false;
-};
-
 // ── New article modal ──
 // New article state
 let newTags = [];
@@ -2368,8 +2295,6 @@ window.openNewModal = () => {
   document.getElementById('new-title').value = '';
   document.getElementById('new-body').value = '';
   document.getElementById('new-notes').value = '';
-  document.getElementById('new-ai-section').style.display = 'none';
-  document.getElementById('new-ai-loading').style.display = 'none';
   document.getElementById('new-save-btn').disabled = false;
   document.getElementById('new-save-btn').textContent = '儲存';
   renderNewMetaRow();
@@ -2468,52 +2393,6 @@ document.addEventListener('click', e => {
   if (!e.target.closest('#new-toolbar') && !e.target.closest('.tb-dropdown')) closeNewDropdowns();
 });
 
-window.runNewAi = async () => {
-  const title = document.getElementById('new-title').value.trim();
-  const body = document.getElementById('new-body').value.trim();
-  if (!title && !body) { showToast('請先填寫標題或內文'); return; }
-  const btn = document.getElementById('new-ai-btn');
-  const origHTML = btn.innerHTML;
-  btn.innerHTML = '<div class="spinner"></div>';
-  btn.disabled = true;
-  document.getElementById('new-ai-loading').style.display = 'flex';
-  document.getElementById('new-ai-section').style.display = 'none';
-  try {
-    const result = await callGemini(`以下是一篇文章，請用繁體中文：1) 寫一段3句話以內的摘要；2) 建議3-5個標籤。
-格式嚴格如下（不要其他文字）：
-摘要：[摘要]
-標籤：[標籤1, 標籤2, ...]
-
-文章標題：${title}
-文章內容：${body.slice(0,3000)}`);
-    const summaryMatch = result.match(/摘要：(.+)/);
-    const tagsMatch = result.match(/標籤：(.+)/);
-    const summary = summaryMatch ? summaryMatch[1].trim() : '';
-    const suggestedTags = tagsMatch ? tagsMatch[1].split(',').map(t=>t.trim()).filter(Boolean) : [];
-    document.getElementById('new-ai-summary').textContent = summary;
-    const tagsDiv = document.getElementById('new-ai-tags');
-    tagsDiv.innerHTML = '';
-    suggestedTags.forEach(tag => {
-      const tagBtn = document.createElement('button');
-      tagBtn.className = 'ai-tag-suggest';
-      tagBtn.textContent = tag;
-      tagBtn.onclick = () => {
-        if (!newTags.includes(tag)) {
-          newTags.push(tag);
-          renderNewTagDropdown();
-          renderNewMetaRow();
-          tagBtn.style.background = 'var(--accent2)';
-          tagBtn.style.color = '#fff';
-        }
-      };
-      tagsDiv.appendChild(tagBtn);
-    });
-    document.getElementById('new-ai-section').style.display = 'block';
-  } catch(e) { showToast('AI 分析失敗：' + e.message); }
-  document.getElementById('new-ai-loading').style.display = 'none';
-  btn.innerHTML = origHTML;
-  btn.disabled = false;
-};
 
 window.saveNewArticle = async () => {
   const title = document.getElementById('new-title').value.trim();
@@ -2523,12 +2402,11 @@ window.saveNewArticle = async () => {
   saveBtn.disabled = true;
   saveBtn.textContent = '儲存中…';
   const notes = document.getElementById('new-notes').value.trim();
-  const aiSummary = document.getElementById('new-ai-summary')?.textContent || '';
   try {
     const docRef = await addDoc(collection(db, 'articles'), {
       uid: currentUser.uid,
       title, body, tags: [...newTags], folderId: newFolderId,
-      notes, highlight: '', aiSummary,
+      notes, highlight: '',
       readStatus: '', favorite: false,
       createdAt: serverTimestamp()
     });
@@ -2609,7 +2487,22 @@ window.filterArticlesMobile = () => {
     const row = document.createElement('div');
     row.className = 'article-row';
     row.style.cssText = 'padding:10px 14px;';
-    row.innerHTML = `<span class="article-title" style="font-size:14px">${escHtml(art.title||'未命名')}</span>`;
+    // Build snippet
+    let snippetHtml = '';
+    const q2 = document.getElementById('mobile-search-input').value.trim();
+    if (q2 && art.body) {
+      const idx = art.body.toLowerCase().indexOf(q2.toLowerCase());
+      if (idx !== -1) {
+        const start = Math.max(0, idx - 20);
+        const end = Math.min(art.body.length, idx + q2.length + 50);
+        const raw = (start > 0 ? '…' : '') + art.body.slice(start, end) + (end < art.body.length ? '…' : '');
+        const safeQ = q2.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const parts = raw.split(new RegExp(`(${safeQ})`, 'gi'));
+        const inner = parts.map(p => p.toLowerCase() === q2.toLowerCase() ? `<mark>${escHtml(p)}</mark>` : escHtml(p)).join('');
+        snippetHtml = `<span class="article-snippet">${inner}</span>`;
+      }
+    }
+    row.innerHTML = `<span class="article-title" style="font-size:14px">${escHtml(art.title||'未命名')}</span>${snippetHtml}`;
     row.onclick = () => { closeMobileSearch(); openReading(art.id); };
     results.appendChild(row);
   });
@@ -2679,45 +2572,6 @@ document.addEventListener('click', e => {
   }
 });
 
-// ── Gemini ──
-async function callGemini(prompt) {
-  const url = getGeminiUrl();
-  if (!url) {
-    openApikeyModal(false);
-    throw new Error('尚未設定 Gemini API Key');
-  }
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-  });
-  if (!res.ok) {
-    if (res.status === 400 || res.status === 403) {
-      openApikeyModal(false);
-      throw new Error('API Key 無效，請重新設定');
-    }
-    throw new Error('HTTP ' + res.status);
-  }
-  const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-}
-
-// ── API Key modal ──
-let apikeyFirstTime = false;
-function openApikeyModal(firstTime) {
-  apikeyFirstTime = firstTime;
-  const modal = document.getElementById('apikey-modal');
-  const skipBtn = document.getElementById('apikey-skip-btn');
-  const input = document.getElementById('apikey-input');
-  // pre-fill if exists
-  input.value = localStorage.getItem('gemini_key') || '';
-  document.getElementById('apikey-status').style.display = 'none';
-  skipBtn.style.display = firstTime ? 'none' : '';
-  modal.classList.add('open');
-  setTimeout(() => input.focus(), 50);
-}
-// API key now handled in settings modal
-
 // ── Settings modal ──
 let currentSettingsTab = 'tts';
 window.openSettings = (tab) => {
@@ -2725,13 +2579,13 @@ window.openSettings = (tab) => {
   renderSettingsBody();
   document.getElementById('settings-modal').classList.add('open');
   document.querySelectorAll('.settings-tab').forEach((t,i) => {
-    t.classList.toggle('active', ['tts','apikey','account','export'][i] === currentSettingsTab);
+    t.classList.toggle('active', ['tts','appearance','account','export'][i] === currentSettingsTab);
   });
 };
 window.switchSettingsTab = (tab) => {
   currentSettingsTab = tab;
   document.querySelectorAll('.settings-tab').forEach((t,i) => {
-    t.classList.toggle('active', ['tts','apikey','account','export'][i] === tab);
+    t.classList.toggle('active', ['tts','appearance','account','export'][i] === tab);
   });
   renderSettingsBody();
 };
@@ -2772,20 +2626,17 @@ function renderSettingsBody() {
       </div>
       <button class="btn" onclick="speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance('測試語音，你好！'),{lang:'zh-TW',rate:parseFloat(localStorage.getItem('tts_rate')||1),voice:speechSynthesis.getVoices().find(v=>v.name===localStorage.getItem('tts_voice'))||null}))">▶ 測試</button>
     `;
-  } else if (currentSettingsTab === 'apikey') {
-    const key = localStorage.getItem('gemini_key') || '';
+  } else if (currentSettingsTab === 'appearance') {
+    const savedSize = parseInt(localStorage.getItem('reading_font_size') || '16');
     body.innerHTML = `
-      <div class="settings-section-title">Gemini API Key</div>
-      <p style="font-size:13px;color:var(--text2);line-height:1.6">Key 只存在瀏覽器本地，不上傳伺服器。<br><a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent)">前往 Google AI Studio 申請 →</a></p>
-      <div class="apikey-input-wrap">
-        <input class="field-input" id="settings-key-input" type="password" value="${escHtml(key)}" placeholder="貼上 Gemini API Key…" style="padding-right:36px" />
-        <button class="apikey-eye" onclick="const i=document.getElementById('settings-key-input');i.type=i.type==='password'?'text':'password'">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        </button>
+      <div class="settings-section-title">外觀設定</div>
+      <div class="settings-row">
+        <label>預設閱讀字體大小</label>
+        <select onchange="applyDefaultFontSize(parseInt(this.value))">
+          ${[12,13,14,15,16,17,18,20,22,24].map(s=>`<option value="${s}" ${s===savedSize?'selected':''}>${s}px</option>`).join('')}
+        </select>
       </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button class="btn btn-primary" onclick="const v=document.getElementById('settings-key-input').value.trim();if(v){localStorage.setItem('gemini_key',v);showToast('已儲存');}">儲存</button>
-      </div>
+      <p style="font-size:12px;color:var(--text3);line-height:1.6">此設定為閱讀頁預設字體大小。開啟文章後也可以用右下角 ＋／－ 即時調整。</p>
     `;
   } else if (currentSettingsTab === 'account') {
     body.innerHTML = `
