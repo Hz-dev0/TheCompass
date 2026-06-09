@@ -7,25 +7,25 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500&family=Noto+Sans+TC:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #f7f6f2;
+  --bg: #fdf4f5;
   --surface: #ffffff;
-  --surface2: #f0ede6;
-  --border: #e0dbd0;
-  --border2: #ccc7b8;
-  --text: #1a1916;
-  --text2: #6b6760;
-  --text3: #9e9a92;
-  --accent: #2d5a3d;
-  --accent-light: #e8f0eb;
-  --accent2: #c17f3a;
-  --accent2-light: #faf3e8;
-  --highlight-bg: #fff8c5;
-  --highlight-border: #e8d44d;
+  --surface2: #f7e8ec;
+  --border: #ecd4da;
+  --border2: #dbbfc8;
+  --text: #2a1a1f;
+  --text2: #7a5060;
+  --text3: #b08898;
+  --accent: #b05870;
+  --accent-light: #fce0e8;
+  --accent2: #7a8fb0;
+  --accent2-light: #e8eef8;
+  --highlight-bg: #fff0f5;
+  --highlight-border: #f0b0c8;
   --danger: #c0392b;
   --radius: 8px;
-  --radius-lg: 12px;
-  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-lg: 0 4px 16px rgba(0,0,0,0.10);
+  --radius-lg: 14px;
+  --shadow: 0 1px 3px rgba(160,80,100,0.07), 0 1px 2px rgba(160,80,100,0.04);
+  --shadow-lg: 0 4px 20px rgba(160,80,100,0.12);
   --font-sans: 'Noto Sans TC', sans-serif;
   --font-serif: 'Noto Serif TC', serif;
   --transition: 0.15s ease;
@@ -39,10 +39,14 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
 /* ── Auth Screen ── */
 #auth-screen {
-  position: fixed; inset: 0; background: var(--bg);
+  position: fixed; inset: 0;
+  background: var(--bg);
+  background-image: radial-gradient(ellipse at 65% 35%, rgba(176,88,112,0.08) 0%, transparent 60%),
+                    radial-gradient(ellipse at 30% 75%, rgba(122,143,176,0.07) 0%, transparent 55%);
   display: flex; align-items: center; justify-content: center; z-index: 1000;
   flex-direction: column; gap: 24px;
 }
@@ -52,16 +56,17 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   text-align: center; max-width: 360px; width: 100%;
   box-shadow: var(--shadow-lg);
 }
-.auth-logo { font-family: var(--font-serif); font-size: 28px; font-weight: 500; color: var(--accent); margin-bottom: 8px; }
+.auth-logo { font-family: var(--font-serif); font-size: 28px; font-weight: 500; color: var(--accent); margin-bottom: 6px; }
+.auth-slogan { font-family: var(--font-serif); font-size: 13px; color: var(--text3); margin-bottom: 4px; letter-spacing: 0.04em; }
 .auth-sub { font-size: 13px; color: var(--text3); margin-bottom: 32px; }
 .google-btn {
   display: flex; align-items: center; justify-content: center; gap: 10px;
   width: 100%; padding: 12px; border-radius: var(--radius);
   border: 1px solid var(--border2); background: var(--surface);
   font-family: var(--font-sans); font-size: 14px; color: var(--text);
-  cursor: pointer; transition: background var(--transition);
+  cursor: pointer; transition: background var(--transition), transform var(--transition), box-shadow var(--transition);
 }
-.google-btn:hover { background: var(--surface2); }
+.google-btn:hover { background: var(--surface2); transform: translateY(-1px); box-shadow: var(--shadow-lg); }
 .google-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
 
 /* ── Layout ── */
@@ -69,7 +74,8 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 #app.visible { display: flex; }
 
 .topbar {
-  height: 48px; background: var(--surface); border-bottom: 1px solid var(--border);
+  height: 48px; background: rgba(255,255,255,0.82); border-bottom: 1px solid rgba(236,212,218,0.7);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   display: flex; align-items: center; padding: 0 16px; gap: 10px;
   flex-shrink: 0; position: relative; z-index: 10;
 }
@@ -88,7 +94,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   white-space: nowrap; font-family: var(--font-sans);
 }
 .tag-pill:hover { border-color: var(--accent); color: var(--accent); }
-.tag-pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tag-pill.active { background: linear-gradient(135deg, #b05870, #c07090); color: #fff; border-color: var(--accent); }
 
 .topbar-actions { display: flex; align-items: center; gap: 6px; margin-left: 4px; }
 .icon-btn {
@@ -151,9 +157,10 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .article-row {
   display: flex; align-items: center; gap: 8px; padding: 7px 10px;
   border-radius: var(--radius); cursor: pointer; position: relative;
-  transition: background var(--transition); border: 1px solid transparent;
+  transition: background var(--transition), border-color var(--transition), padding-left var(--transition);
+  border: 1px solid transparent; border-left: 3px solid transparent;
 }
-.article-row:hover { background: var(--surface); border-color: var(--border); }
+.article-row:hover { background: var(--surface); border-color: var(--border); border-left-color: var(--accent); padding-left: 8px; }
 .article-row.drag-dragging { opacity: 0.4; }
 .article-title { font-size: 13px; color: var(--text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .article-date { font-size: 11px; color: var(--text3); flex-shrink: 0; }
@@ -294,7 +301,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 }
 .btn:hover { background: var(--surface2); }
 .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-.btn-primary:hover { background: #234a31; border-color: #234a31; }
+.btn-primary:hover { background: #8f4059; border-color: #8f4059; box-shadow: 0 2px 8px rgba(176,88,112,0.3); }
 .btn-danger { color: var(--danger); border-color: var(--danger); }
 .btn-danger:hover { background: #fdf0ef; }
 .ai-loading { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text3); }
@@ -303,7 +310,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 
 /* ── Folder new modal ── */
 .folder-modal {
-  position: fixed; inset: 0; z-index: 400; background: rgba(26,25,22,0.5);
+  position: fixed; inset: 0; z-index: 400; background: rgba(42,26,31,0.45);
   display: none; align-items: center; justify-content: center;
 }
 .folder-modal.open { display: flex; }
@@ -312,7 +319,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 
 /* ── API Key modal ── */
 .apikey-modal {
-  position: fixed; inset: 0; z-index: 500; background: rgba(26,25,22,0.6);
+  position: fixed; inset: 0; z-index: 500; background: rgba(42,26,31,0.5);
   display: none; align-items: center; justify-content: center;
 }
 .apikey-modal.open { display: flex; }
@@ -340,10 +347,13 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 /* toast */
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(40px);
-  background: var(--text); color: #fff; padding: 9px 18px; border-radius: 20px;
+  background: #3a1f28; color: #fce8ee; padding: 9px 20px; border-radius: 20px;
   font-size: 13px; z-index: 900; transition: all 0.25s ease; opacity: 0; pointer-events: none;
+  box-shadow: 0 4px 16px rgba(176,88,112,0.25);
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.success { background: var(--accent); color: #fff; }
+.toast.error { background: var(--danger); color: #fff; }
 
 /* User avatar */
 .user-avatar {
@@ -352,15 +362,22 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   flex-shrink: 0;
 }
 .user-initials {
-  width: 28px; height: 28px; border-radius: 50%; background: var(--accent);
+  width: 28px; height: 28px; border-radius: 50%;
+  background: linear-gradient(135deg, #b05870, #c07090);
   color: #fff; font-size: 12px; font-weight: 500; display: flex;
   align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
 }
 
 /* empty state */
-.empty { text-align: center; padding: 60px 20px; color: var(--text3); }
-.empty svg { width: 40px; height: 40px; margin-bottom: 12px; opacity: .4; }
-.empty p { font-size: 14px; }
+.empty { text-align: center; padding: 60px 20px; color: var(--text3); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.empty svg { width: 44px; height: 44px; opacity: .35; color: var(--accent); }
+.empty p { font-size: 14px; color: var(--text3); }
+.empty .empty-cta {
+  margin-top: 4px; padding: 8px 20px; border-radius: var(--radius); font-size: 13px;
+  font-family: var(--font-sans); cursor: pointer; border: 1px solid var(--accent);
+  background: var(--accent-light); color: var(--accent); transition: all var(--transition);
+}
+.empty .empty-cta:hover { background: var(--accent); color: #fff; }
 
 /* folder toggle btn */
 .folder-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; }
@@ -386,9 +403,9 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 .tb-btn svg { width: 14px; height: 14px; pointer-events: none; flex-shrink: 0; }
 /* read-status button states */
 .tb-btn.read-todo { color: var(--text3); }
-.tb-btn.read-plan { color: #2d7a4f; background: #e6f4ec; border-color: #a8d8b8; }
-.tb-btn.read-done { color: #b85c8a; background: #fce8f3; border-color: #e8b8d4; }
-.tb-btn.fav-on { color: #c0392b; background: #fdf0ef; border-color: #f0b8b3; }
+.tb-btn.read-plan { color: #7a8fb0; background: #e8eef8; border-color: #b8cce0; }
+.tb-btn.read-done { color: #b05870; background: #fce0e8; border-color: #e8b0c4; }
+.tb-btn.fav-on { color: #c05870; background: #fce0e8; border-color: #f0b0c0; }
 
 /* Article title bar */
 .reading-title-bar {
@@ -406,7 +423,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 .reading-meta-tag {
   font-size: 11px; padding: 2px 8px; border-radius: 20px;
   background: var(--accent-light); color: var(--accent);
-  border: 1px solid rgba(45,90,61,0.2); cursor: pointer;
+  border: 1px solid rgba(176,88,112,0.25); cursor: pointer;
 }
 .reading-meta-tag:hover { background: var(--accent); color: #fff; }
 
@@ -418,6 +435,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   flex: 1; overflow-y: auto; padding: 24px;
   border-right: 1px solid var(--border);
   transition: flex 0.2s ease;
+  background: linear-gradient(180deg, var(--surface) 0%, #fdf8f9 100%);
 }
 .reading-body-pane.full { border-right: none; }
 .reading-notes-pane {
@@ -442,7 +460,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 /* Article body */
 .art-body-rendered {
   font-family: var(--font-serif); font-size: 16px; line-height: 1.95;
-  color: var(--text); word-break: break-word;
+  color: var(--text); word-break: break-word; max-width: 65ch; margin: 0 auto;
 }
 .art-body-rendered mark {
   background: var(--highlight-bg); border-bottom: 2px solid var(--highlight-border);
@@ -505,7 +523,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 
 /* Settings modal */
 .settings-modal {
-  position: fixed; inset: 0; z-index: 500; background: rgba(26,25,22,0.5);
+  position: fixed; inset: 0; z-index: 500; background: rgba(42,26,31,0.45);
   display: none; align-items: center; justify-content: center;
 }
 .settings-modal.open { display: flex; }
@@ -536,7 +554,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 
 /* Passcode modal */
 .passcode-modal {
-  position: fixed; inset: 0; z-index: 600; background: rgba(26,25,22,0.6);
+  position: fixed; inset: 0; z-index: 600; background: rgba(42,26,31,0.55);
   display: none; align-items: center; justify-content: center;
 }
 .passcode-modal.open { display: flex; }
@@ -595,13 +613,13 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 
 /* Highlight mode */
 .art-body-rendered.highlight-mode { cursor: text; }
-.art-body-rendered.highlight-mode ::selection { background: #ffe066; }
+.art-body-rendered.highlight-mode ::selection { background: #ffd6e4; }
 
 /* New article body: hide border when in view mode */
 .art-body-viewonly {
   font-family: var(--font-serif); font-size: 16px; line-height: 1.95;
   color: var(--text); white-space: pre-wrap; word-break: break-word;
-  min-height: 100px;
+  min-height: 100px; max-width: 65ch; margin: 0 auto;
 }
 .art-body-viewonly mark {
   background: var(--highlight-bg); border-bottom: 2px solid var(--highlight-border);
@@ -768,6 +786,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 <div id="auth-screen">
   <div class="auth-card">
     <div class="auth-logo">收集冊</div>
+    <div class="auth-slogan">記錄值得保留的片段</div>
     <div class="auth-sub">知乎好文，一鍵收藏</div>
     <button class="google-btn" onclick="signInWithGoogle()">
       <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
@@ -1419,7 +1438,7 @@ function renderArticleList() {
   const list = document.getElementById('article-list');
   const filtered = getFilteredArticles();
   if (filtered.length === 0) {
-    list.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>還沒有文章</p></div>`;
+    list.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>還沒有文章</p><button class="empty-cta" onclick="showPanel('new')">+ 新增第一篇</button></div>`;
     return;
   }
   list.innerHTML = '';
