@@ -160,17 +160,48 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 
 /* ── Reading progress bar ── */
 #reading-progress-bar {
-  position: sticky; top: 0; left: 0; width: 0%; height: 2px;
+  position: absolute; bottom: -1px; left: 0; width: 0%; height: 2px;
   background: linear-gradient(90deg, var(--accent), var(--accent2));
-  z-index: 10; flex-shrink: 0; transition: width 0.12s linear;
+  z-index: 5; transition: width 0.12s linear;
   pointer-events: none;
+}
+.reading-title-bar { position: relative; }
+
+/* ── Font size float ── */
+#reading-font-controls {
+  position: sticky; bottom: 18px;
+  float: right; clear: both;
+  z-index: 20;
+  display: flex; align-items: center; gap: 2px;
+  background: rgba(255,255,255,0.88); backdrop-filter: blur(10px);
+  border: 1px solid var(--border); border-radius: 20px;
+  padding: 3px 6px; box-shadow: var(--shadow);
+  opacity: 0; transition: opacity 0.2s;
+  pointer-events: none;
+  margin-right: -8px;
+}
+#reading-body-pane:hover #reading-font-controls,
+#reading-font-controls:hover { opacity: 1; pointer-events: auto; }
+.font-ctrl-btn {
+  width: 24px; height: 24px; border: none; background: transparent;
+  cursor: pointer; color: var(--text2); font-size: 14px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 12px; transition: background var(--transition), color var(--transition);
+  line-height: 1; font-family: var(--font-sans);
+}
+.font-ctrl-btn:hover { background: var(--surface2); color: var(--accent); }
+#reading-font-size-label {
+  font-size: 10px; color: var(--text3); min-width: 22px;
+  text-align: center; font-family: var(--font-sans);
 }
 
 /* ── Search highlight in article list ── */
 .article-title mark {
   background: transparent; color: var(--accent);
-  font-weight: 600; border-bottom: 1.5px solid var(--accent);
-  padding: 0; border-radius: 0;
+  font-weight: 600; padding: 0; border-radius: 0;
+  display: inline; vertical-align: baseline;
+  text-decoration: underline; text-decoration-color: var(--accent);
+  text-underline-offset: 2px; text-decoration-thickness: 1.5px;
 }
 
 /* ── Article list ── */
@@ -458,6 +489,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   border-right: 1px solid var(--border);
   transition: flex 0.2s ease;
   background: linear-gradient(180deg, var(--surface) 0%, #fdf8f9 100%);
+  position: relative;
 }
 .reading-body-pane.full { border-right: none; }
 .reading-notes-pane {
@@ -921,8 +953,6 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
       </button>
       <button class="tb-btn" id="tb-tts-btn" onclick="toggleTTS()" oncontextmenu="openTTSSpeedMenu(event)" title="朗讀（右鍵調語速）">🔊</button>
-      <button class="tb-btn" onclick="changeFontSize(-1)" title="縮小字體" style="font-size:15px;font-weight:500;letter-spacing:-1px">－</button>
-      <button class="tb-btn" onclick="changeFontSize(1)" title="放大字體" style="font-size:15px;font-weight:500">＋</button>
       <button class="tb-btn" id="tb-pin-btn" onclick="togglePin()" title="置頂">🔻</button>
       <button class="tb-btn" id="tb-ai-btn" onclick="runAiAnalysis()" title="AI分析">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="m9 12 2 2 4-4"/></svg>
@@ -954,6 +984,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 
   <!-- Title bar -->
   <div class="reading-title-bar" id="reading-title-bar">
+    <div id="reading-progress-bar"></div>
     <textarea class="reading-title-input" id="reading-title-input" rows="1" oninput="autoResizeTitle(this); scheduleFieldSave('title', this.value)"></textarea>
     <div class="reading-meta-row" id="reading-meta-row"></div>
   </div>
@@ -961,8 +992,12 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   <!-- Body + Notes -->
   <div class="reading-body-wrap">
     <div class="reading-body-pane" id="reading-body-pane">
-      <div id="reading-progress-bar"></div>
       <div id="reading-body-content"></div>
+      <div id="reading-font-controls">
+        <button class="font-ctrl-btn" onclick="changeFontSize(-1)" title="縮小字體">－</button>
+        <span id="reading-font-size-label">16</span>
+        <button class="font-ctrl-btn" onclick="changeFontSize(1)" title="放大字體">＋</button>
+      </div>
     </div>
     <div class="reading-notes-pane" id="reading-notes-pane">
       <div class="notes-pane-label" style="justify-content:space-between">
@@ -1802,6 +1837,8 @@ window.autoResizeTitle = (el) => {
 let readingFontSize = parseInt(localStorage.getItem('reading_font_size') || '16');
 function applyReadingFontSize() {
   document.documentElement.style.setProperty('--reading-font-size', readingFontSize + 'px');
+  const lbl = document.getElementById('reading-font-size-label');
+  if (lbl) lbl.textContent = readingFontSize;
 }
 applyReadingFontSize();
 window.changeFontSize = (delta) => {
