@@ -198,7 +198,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 /* ── Search highlight in article list ── */
 .article-title mark {
   background: transparent; color: var(--accent);
-  font-weight: 600; padding: 0; border-radius: 0;
+  font-weight: inherit; padding: 0; border-radius: 0;
   display: inline; vertical-align: baseline;
   text-decoration: underline; text-decoration-color: var(--accent);
   text-underline-offset: 2px; text-decoration-thickness: 1.5px;
@@ -726,10 +726,10 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   .search-wrap { display: none !important; }
   #mobile-search-overlay {
     position: fixed; inset: 0; top: 48px; background: var(--surface);
-    z-index: 350; display: none; flex-direction: column;
+    z-index: 350; display: none !important; flex-direction: column;
     border-top: 1px solid var(--border);
   }
-  #mobile-search-overlay.open { display: flex; }
+  #mobile-search-overlay.open { display: flex !important; }
   #mobile-search-overlay .mobile-search-inner {
     display: flex; align-items: center; gap: 8px;
     padding: 10px 14px; border-bottom: 1px solid var(--border);
@@ -1146,7 +1146,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 <div id="mobile-tag-popover"></div>
 
 <!-- Mobile search overlay -->
-<div id="mobile-search-overlay">
+<div id="mobile-search-overlay" style="display:none">
   <div class="mobile-search-inner">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px;color:var(--text3);flex-shrink:0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input id="mobile-search-input" placeholder="搜尋標題、內文…" oninput="filterArticlesMobile()" autocomplete="off" />
