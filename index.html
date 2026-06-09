@@ -227,20 +227,14 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   min-width: 0; overflow: hidden;
 }
 .article-row::before {
-  content: ''; position: absolute; inset: 0;
-  border-radius: var(--radius);
-  background: linear-gradient(105deg,
-    transparent 0%,
-    rgba(176,88,112,0.06) 30%,
-    rgba(255,255,255,0.45) 50%,
-    rgba(176,88,112,0.06) 70%,
-    transparent 100%);
-  background-size: 250% 100%;
-  background-position: 200% center;
+  content: ''; position: absolute; left: 0; top: 4px; bottom: 4px;
+  width: 3px; border-radius: 3px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: center;
   opacity: 0;
-  transition: opacity 0.18s ease, background-position 0.55s ease;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s ease;
   pointer-events: none;
-  backdrop-filter: blur(0px);
 }
 .article-row:hover {
   background: rgba(252,224,232,0.4);
@@ -248,7 +242,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 }
 .article-row:hover::before {
   opacity: 1;
-  background-position: -50% center;
+  transform: scaleY(1);
 }
 .article-row.drag-dragging { opacity: 0.4; }
 .article-row.pinned { border-left: 3px solid var(--danger); padding-left: 7px; }
@@ -432,7 +426,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 }
 
 /* empty state */
-.empty { text-align: center; padding: 60px 20px; color: var(--text3); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.empty { text-align: center; padding: 40px 20px 60px; color: var(--text3); display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .empty svg { width: 44px; height: 44px; opacity: .35; color: var(--accent); }
 .empty p { font-size: 14px; color: var(--text3); }
 .empty .empty-cta {
@@ -671,8 +665,44 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   width: 7px; height: 7px; border-radius: 50%; background: var(--danger);
 }
 
-/* Tag bar open state */
-.tag-bar.open { display:flex !important; max-width:600px !important; overflow-x:auto; }
+/* Context menu for rename */
+.ctx-menu {
+  position: fixed; z-index: 700; background: var(--surface);
+  border: 1px solid var(--border2); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg); padding: 6px; min-width: 140px;
+  display: none; flex-direction: column; gap: 2px;
+}
+.ctx-menu.open { display: flex; }
+.ctx-menu-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: var(--radius);
+  font-size: 13px; color: var(--text2); cursor: pointer;
+  transition: background var(--transition);
+}
+.ctx-menu-item:hover { background: var(--surface2); color: var(--text); }
+.ctx-menu-item svg { width: 13px; height: 13px; flex-shrink: 0; }
+.ctx-menu-item.danger { color: var(--danger); }
+.ctx-menu-item.danger:hover { background: #fce0e0; }
+
+/* Rename inline input */
+.rename-input-wrap {
+  position: fixed; z-index: 800; background: var(--surface);
+  border: 1px solid var(--accent); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg); padding: 12px; min-width: 220px;
+  display: none; flex-direction: column; gap: 8px;
+}
+.rename-input-wrap.open { display: flex; }
+.rename-input-wrap input {
+  width: 100%; padding: 6px 10px; border: 1px solid var(--border2);
+  border-radius: var(--radius); font-size: 13px; outline: none;
+  font-family: var(--font-sans); color: var(--text);
+}
+.rename-input-wrap input:focus { border-color: var(--accent); }
+.rename-input-wrap .rename-btns { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* Tag bar right-click area */
+.tag-pill { position: relative; }
+
 #tag-toggle-btn.active { background:var(--accent-light);border-color:var(--accent);color:var(--accent); }
 
 /* Highlight mode */
@@ -1097,7 +1127,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   <!-- Body + Notes split (same as reading page) -->
   <div class="reading-body-wrap">
     <div class="reading-body-pane" id="new-body-pane">
-      <textarea class="art-body-editor" id="new-body" placeholder="貼上文章內文…" style="min-height:300px;height:auto" oninput="this.style.height='auto';this.style.height=Math.max(300,this.scrollHeight)+'px'"></textarea>
+      <textarea class="art-body-editor" id="new-body" placeholder="貼上文章內文…" style="min-height:300px;height:auto" oninput="autoResizeNewBody(this)"></textarea>
     </div>
     <div class="reading-notes-pane" id="new-notes-pane">
       <div class="notes-pane-label">
@@ -1125,6 +1155,28 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
       <button class="btn" onclick="closeFolderModal()">取消</button>
       <button class="btn btn-primary" onclick="saveFolderModal()">建立</button>
     </div>
+  </div>
+</div>
+
+<!-- Context menu (right-click on folder / tag) -->
+<div class="ctx-menu" id="ctx-menu">
+  <div class="ctx-menu-item" id="ctx-rename" onclick="startRename()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5l4 4L7 21l-4 1 1-4z"/></svg>
+    重新命名
+  </div>
+  <div class="ctx-menu-item danger" id="ctx-delete-folder" onclick="deleteCtxTarget()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+    刪除
+  </div>
+</div>
+
+<!-- Rename dialog -->
+<div class="rename-input-wrap" id="rename-wrap">
+  <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em" id="rename-label">重新命名</div>
+  <input id="rename-input" onkeydown="onRenameKey(event)" />
+  <div class="rename-btns">
+    <button class="btn" onclick="closeRename()">取消</button>
+    <button class="btn btn-primary" onclick="confirmRename()">確認</button>
   </div>
 </div>
 
@@ -1290,6 +1342,7 @@ function renderTagBar() {
     btn.dataset.tag = tag;
     btn.textContent = tag;
     btn.onclick = () => filterTag(btn);
+    btn.addEventListener('contextmenu', e => openCtxMenu(e, 'tag', tag, tag));
     bar.appendChild(btn);
   });
   // Show TAG button active if non-all tag selected
@@ -1404,6 +1457,7 @@ function renderFolderTree() {
       renderFolderTree();
       renderArticleList();
     };
+    item.addEventListener('contextmenu', e => openCtxMenu(e, 'folder', folder.id, folder.name));
     // Drag article onto folder
     item.addEventListener('dragover', e => {
       e.preventDefault();
@@ -1518,7 +1572,7 @@ function renderArticleList() {
   const list = document.getElementById('article-list');
   const filtered = getFilteredArticles();
   if (filtered.length === 0) {
-    list.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>還沒有文章</p><button class="empty-cta" onclick="showPanel('new')">+ 新增第一篇</button></div>`;
+    list.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>還沒有文章</p><button class="empty-cta" onclick="openNewModal()">+ 新增第一篇</button></div>`;
     return;
   }
   list.innerHTML = '';
@@ -1622,8 +1676,8 @@ window.openReading = (id) => {
   highlightState = 'off';
   pendingHighlightText = '';
   titleBarVisible = true;
-  // On mobile, default notes to hidden; on desktop keep visible
-  notesVisible = !isMobile();
+  // Show notes pane only if article has notes content; otherwise hide by default
+  notesVisible = !isMobile() && !!(articles.find(a => a.id === id)?.notes?.trim());
   const banner = document.getElementById('highlight-mode-banner');
   if (banner) banner.style.display = 'none';
   hideHighlightConfirmBar();
@@ -1797,6 +1851,15 @@ function updateToolbarState(art) {
 window.autoResizeTitle = (el) => {
   el.style.height = 'auto';
   el.style.height = el.scrollHeight + 'px';
+};
+
+// Resize new-article body without scrolling the pane to top
+window.autoResizeNewBody = (el) => {
+  const pane = document.getElementById('new-body-pane');
+  const scrollTop = pane ? pane.scrollTop : 0;
+  el.style.height = 'auto';
+  el.style.height = Math.max(300, el.scrollHeight) + 'px';
+  if (pane) pane.scrollTop = scrollTop;
 };
 
 // ── Reading font size ──
@@ -2297,6 +2360,11 @@ window.openNewModal = () => {
   document.getElementById('new-notes').value = '';
   document.getElementById('new-save-btn').disabled = false;
   document.getElementById('new-save-btn').textContent = '儲存';
+  // Default: hide notes pane
+  const newNotesPane = document.getElementById('new-notes-pane');
+  const newBodyPane = document.getElementById('new-body-pane');
+  if (newNotesPane) newNotesPane.classList.add('hidden');
+  if (newBodyPane) newBodyPane.classList.add('full');
   renderNewMetaRow();
   renderNewTagDropdown();
   renderNewFolderDropdown();
@@ -2673,16 +2741,15 @@ window.loginWithPasscode = async () => {
   const code = document.getElementById('passcode-input').value.trim();
   if (code.length !== 6) { showToast('請輸入6位驗證碼'); return; }
   try {
-    const snap = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js')
-      .then(m => m.getDoc(m.doc(db, 'passcodes', code)));
+    const snap = await getDocs(query(collection(db, 'passcodes'), where('__name__', '==', code)))
+      .then(() => getDoc(doc(db, 'passcodes', code)));
     if (!snap.exists()) { showToast('驗證碼無效'); return; }
     const data = snap.data();
     if (Date.now() > data.expires) { showToast('驗證碼已過期'); return; }
-    // Store the uid locally so app loads correct data without Google login
+    // Store the GOOGLE user's uid — ensures anonymous login reads the same Firestore data
     localStorage.setItem('passcode_uid', data.uid);
     localStorage.setItem('passcode_expires', data.expires);
     showToast('驗證碼正確，以匿名模式登入中…');
-    // Trigger anonymous data load
     loadAnonymousData(data.uid);
   } catch(e) { showToast('登入失敗：' + e.message); }
 };
@@ -2742,7 +2809,100 @@ window.showToast = (msg) => {
 document.getElementById('new-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeNewModal(); });
 document.getElementById('folder-modal').addEventListener('click', e => { if(e.target===e.currentTarget) closeFolderModal(); });
 
-// ESC key
+// ── Context menu (folder / tag rename) ──
+let ctxTarget = null; // { type: 'folder'|'tag', id, name }
+
+function openCtxMenu(e, type, id, name) {
+  e.preventDefault();
+  e.stopPropagation();
+  ctxTarget = { type, id, name };
+  const menu = document.getElementById('ctx-menu');
+  // Only show delete for folders; tags don't have a delete in this simple version
+  document.getElementById('ctx-delete-folder').style.display = type === 'folder' ? 'flex' : 'none';
+  menu.classList.add('open');
+  const x = Math.min(e.clientX, window.innerWidth - 160);
+  const y = Math.min(e.clientY, window.innerHeight - 120);
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+}
+
+function closeCtxMenu() {
+  document.getElementById('ctx-menu').classList.remove('open');
+}
+
+window.startRename = () => {
+  closeCtxMenu();
+  if (!ctxTarget) return;
+  const wrap = document.getElementById('rename-wrap');
+  const input = document.getElementById('rename-input');
+  const label = document.getElementById('rename-label');
+  label.textContent = ctxTarget.type === 'folder' ? '重新命名資料夾' : '重新命名標籤';
+  input.value = ctxTarget.name;
+  wrap.classList.add('open');
+  // Position near center
+  wrap.style.left = '50%';
+  wrap.style.top = '50%';
+  wrap.style.transform = 'translate(-50%, -50%)';
+  setTimeout(() => { input.focus(); input.select(); }, 50);
+};
+
+window.closeRename = () => {
+  document.getElementById('rename-wrap').classList.remove('open');
+  ctxTarget = null;
+};
+
+window.onRenameKey = (e) => {
+  if (e.key === 'Enter') confirmRename();
+  if (e.key === 'Escape') closeRename();
+};
+
+window.confirmRename = async () => {
+  const newName = document.getElementById('rename-input').value.trim();
+  if (!newName || !ctxTarget) return;
+  if (ctxTarget.type === 'folder') {
+    await updateDoc(doc(db, 'folders', ctxTarget.id), { name: newName });
+    showToast(`已重新命名為「${newName}」`);
+  } else if (ctxTarget.type === 'tag') {
+    // Rename tag across all articles
+    const affected = articles.filter(a => (a.tags||[]).includes(ctxTarget.name));
+    const updates = affected.map(a => updateDoc(doc(db, 'articles', a.id), {
+      tags: a.tags.map(t => t === ctxTarget.name ? newName : t)
+    }));
+    await Promise.all(updates);
+    showToast(`標籤已重新命名為「${newName}」`);
+  }
+  closeRename();
+};
+
+window.deleteCtxTarget = async () => {
+  if (!ctxTarget || ctxTarget.type !== 'folder') return;
+  closeCtxMenu();
+  const folder = folders.find(f => f.id === ctxTarget.id);
+  const artCount = articles.filter(a => a.folderId === ctxTarget.id).length;
+  const msg = artCount > 0
+    ? `確定刪除資料夾「${folder?.name}」？\n其中 ${artCount} 篇文章將移至未分類。`
+    : `確定刪除資料夾「${folder?.name}」？`;
+  if (!confirm(msg)) return;
+  // Move articles out of folder
+  const moveUpdates = articles.filter(a => a.folderId === ctxTarget.id)
+    .map(a => updateDoc(doc(db, 'articles', a.id), { folderId: null }));
+  await Promise.all(moveUpdates);
+  await deleteDoc(doc(db, 'folders', ctxTarget.id));
+  if (currentFolderId === ctxTarget.id) { currentFolderId = null; currentFolderPath = []; }
+  ctxTarget = null;
+  showToast('資料夾已刪除');
+};
+
+// Close ctx menu on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('#ctx-menu')) closeCtxMenu();
+  if (!e.target.closest('#rename-wrap') && !e.target.closest('#ctx-menu')) {
+    // don't close rename when clicking confirm/cancel (handled by buttons)
+  }
+});
+
+// ESC closes rename too
+
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     // close dropdowns first
