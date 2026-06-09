@@ -148,9 +148,30 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .folder-item.drag-over { background: var(--accent-light); border: 1px dashed var(--accent); }
 .folder-item svg { width: 14px; height: 14px; flex-shrink: 0; }
 .folder-item .count { margin-left: auto; font-size: 11px; color: var(--text3); }
+.folder-item .count.empty { color: var(--border2); font-style: italic; }
+.folder-item.folder-empty > svg, .folder-item.folder-empty > span:first-of-type { opacity: 0.5; }
 .folder-indent { padding-left: 22px; }
 .folder-back { color: var(--accent); font-size: 12px; }
 .folder-back svg { color: var(--accent); }
+/* Folder drag-reorder */
+.folder-item.folder-dragging { opacity: 0.35; }
+.folder-item.folder-drop-above { border-top: 2px solid var(--accent) !important; }
+.folder-item.folder-drop-below { border-bottom: 2px solid var(--accent) !important; }
+
+/* ── Reading progress bar ── */
+#reading-progress-bar {
+  position: sticky; top: 0; left: 0; width: 0%; height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  z-index: 10; flex-shrink: 0; transition: width 0.12s linear;
+  pointer-events: none;
+}
+
+/* ── Search highlight in article list ── */
+.article-title mark {
+  background: transparent; color: var(--accent);
+  font-weight: 600; border-bottom: 1.5px solid var(--accent);
+  padding: 0; border-radius: 0;
+}
 
 /* ── Article list ── */
 .article-list { flex: 1; overflow-y: auto; padding: 8px; }
@@ -940,6 +961,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   <!-- Body + Notes -->
   <div class="reading-body-wrap">
     <div class="reading-body-pane" id="reading-body-pane">
+      <div id="reading-progress-bar"></div>
       <div id="reading-body-content"></div>
     </div>
     <div class="reading-notes-pane" id="reading-notes-pane">
@@ -1366,35 +1388,95 @@ function renderFolderTree() {
 
   // Show children of current folder
   const parentId = (currentFolderId === '__uncat__' || currentFolderId === null) ? null : currentFolderId;
-  const children = folders.filter(f => (f.parentId||null) === parentId);
-  children.forEach(folder => {
+  const children = folders
+    .filter(f => (f.parentId||null) === parentId)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+  let folderDragSrc = null;
+
+  children.forEach((folder, idx) => {
     const count = articles.filter(a => a.folderId === folder.id).length;
+    const isEmpty = count === 0;
     const item = document.createElement('div');
-    item.className = 'folder-item' + (currentFolderId===folder.id ? ' active':'');
-    item.draggable = false;
+    item.className = 'folder-item' + (currentFolderId===folder.id ? ' active':'') + (isEmpty ? ' folder-empty' : '');
+    item.draggable = true;
     item.dataset.folderId = folder.id;
-    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(folder.name)} <span class="count">${count}</span>`;
-    item.onclick = () => {
+    item.dataset.folderIdx = idx;
+    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(folder.name)} <span class="count${isEmpty ? ' empty' : ''}">${count || '—'}</span>`;
+    item.onclick = (e) => {
+      if (item.classList.contains('folder-dragging')) return;
       currentFolderId = folder.id;
       currentFolderPath = [...currentFolderPath, {id: folder.id, name: folder.name}];
       renderFolderTree();
       renderArticleList();
     };
-    // Drag-over for dropping articles
-    item.addEventListener('dragover', e => { e.preventDefault(); item.classList.add('drag-over'); });
-    item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+    // Drag article onto folder
+    item.addEventListener('dragover', e => {
+      e.preventDefault();
+      const isDraggingFolder = e.dataTransfer.types.includes('folderId');
+      if (!isDraggingFolder) {
+        item.classList.add('drag-over');
+      } else {
+        item.classList.remove('drag-over');
+        // Show reorder hint
+        const rect = item.getBoundingClientRect();
+        const mid = rect.top + rect.height / 2;
+        item.classList.remove('folder-drop-above', 'folder-drop-below');
+        if (e.clientY < mid) item.classList.add('folder-drop-above');
+        else item.classList.add('folder-drop-below');
+      }
+    });
+    item.addEventListener('dragleave', (e) => {
+      item.classList.remove('drag-over', 'folder-drop-above', 'folder-drop-below');
+    });
     item.addEventListener('drop', async e => {
       e.preventDefault();
-      item.classList.remove('drag-over');
+      item.classList.remove('drag-over', 'folder-drop-above', 'folder-drop-below');
       const artId = e.dataTransfer.getData('articleId');
+      const srcFolderId = e.dataTransfer.getData('folderId');
       if (artId) {
         await updateDoc(doc(db, 'articles', artId), { folderId: folder.id });
         showToast(`已移到「${folder.name}」`);
-        // Optimistic count update
         const art = articles.find(a => a.id === artId);
         if (art) art.folderId = folder.id;
         renderFolderTree();
+      } else if (srcFolderId && srcFolderId !== folder.id) {
+        // Reorder: determine above or below
+        const rect = item.getBoundingClientRect();
+        const insertAbove = e.clientY < rect.top + rect.height / 2;
+        const srcFolder = folders.find(f => f.id === srcFolderId);
+        const targetFolder = folder;
+        if (!srcFolder) return;
+        // Re-sort siblings excluding src
+        const sibs = folders
+          .filter(f => (f.parentId||null) === parentId && f.id !== srcFolderId)
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        const targetIdx = sibs.findIndex(f => f.id === targetFolder.id);
+        const insertIdx = insertAbove ? targetIdx : targetIdx + 1;
+        sibs.splice(insertIdx, 0, srcFolder);
+        // Save new orders
+        const updates = sibs.map((f, i) => updateDoc(doc(db, 'folders', f.id), { order: i }));
+        await Promise.all(updates);
+        // Update local state
+        sibs.forEach((f, i) => { const lf = folders.find(x => x.id === f.id); if (lf) lf.order = i; });
+        renderFolderTree();
+        showToast('資料夾已排序');
       }
+    });
+    // Folder drag-to-reorder events
+    item.addEventListener('dragstart', e => {
+      // Only initiate folder drag if not dragging an article row
+      e.stopPropagation();
+      folderDragSrc = folder.id;
+      e.dataTransfer.setData('folderId', folder.id);
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => item.classList.add('folder-dragging'), 0);
+    });
+    item.addEventListener('dragend', () => {
+      item.classList.remove('folder-dragging', 'folder-drop-above', 'folder-drop-below');
+      folderDragSrc = null;
+      // Clean up all siblings
+      tree.querySelectorAll('.folder-item').forEach(el => el.classList.remove('folder-drop-above', 'folder-drop-below'));
     });
     tree.appendChild(item);
   });
@@ -1453,6 +1535,19 @@ function renderArticleList() {
     row.dataset.id = art.id;
     const tagsHtml = (art.tags||[]).slice(0,3).map(t=>`<span class="article-tag">${escHtml(t)}</span>`).join('');
     const dateStr = art.createdAt ? formatDate(art.createdAt.seconds*1000) : '';
+    // Search highlight in title
+    const searchQ = document.getElementById('search-input')?.value.trim() || '';
+    const rawTitle = art.title || '未命名';
+    let titleHtml;
+    if (searchQ) {
+      const safeQ = searchQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      titleHtml = escHtml(rawTitle).replace(new RegExp(safeQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m => `<mark>${escHtml(m)}</mark>`);
+      // Re-do: escape then highlight
+      const parts = rawTitle.split(new RegExp(`(${safeQ})`, 'gi'));
+      titleHtml = parts.map(p => p.toLowerCase() === searchQ.toLowerCase() ? `<mark>${escHtml(p)}</mark>` : escHtml(p)).join('');
+    } else {
+      titleHtml = escHtml(rawTitle);
+    }
     // Dot: pinned=red circle > favorite=❤️ > done=dash > pending=grey circle
     let dotHtml;
     if (art.pinned) {
@@ -1466,7 +1561,7 @@ function renderArticleList() {
     }
     row.innerHTML = `
       ${dotHtml}
-      <span class="article-title">${escHtml(art.title||'未命名')}</span>
+      <span class="article-title">${titleHtml}</span>
       <div class="article-tags">${tagsHtml}</div>
       <span class="article-date">${dateStr}</span>
     `;
@@ -1540,6 +1635,20 @@ window.openReading = (id) => {
   document.getElementById('tb-collapse-btn').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="18 15 12 9 6 15"/></svg>`;
   renderReadingPage(art);
   stopTTS();
+  // Reading progress bar
+  const bodyPane = document.getElementById('reading-body-pane');
+  const progressBar = document.getElementById('reading-progress-bar');
+  if (progressBar) progressBar.style.width = '0%';
+  if (bodyPane) {
+    bodyPane._progressHandler && bodyPane.removeEventListener('scroll', bodyPane._progressHandler);
+    bodyPane._progressHandler = () => {
+      const scrolled = bodyPane.scrollTop;
+      const total = bodyPane.scrollHeight - bodyPane.clientHeight;
+      const pct = total > 0 ? Math.min(100, Math.round(scrolled / total * 100)) : 0;
+      if (progressBar) progressBar.style.width = pct + '%';
+    };
+    bodyPane.addEventListener('scroll', bodyPane._progressHandler);
+  }
   // mobile toolbar auto-hide
   setupMobileToolbar();
 };
@@ -2392,7 +2501,10 @@ window.saveFolderModal = async () => {
   const name = document.getElementById('folder-name-input').value.trim();
   if (!name) { showToast('請填寫資料夾名稱'); return; }
   const parentId = document.getElementById('folder-parent-select').value || null;
-  await addDoc(collection(db, 'folders'), { uid: currentUser.uid, name, parentId });
+  // assign order = max existing order + 1 for same parent
+  const siblings = folders.filter(f => (f.parentId||null) === parentId);
+  const maxOrder = siblings.reduce((m, f) => Math.max(m, f.order ?? 0), 0);
+  await addDoc(collection(db, 'folders'), { uid: currentUser.uid, name, parentId, order: maxOrder + 1 });
   closeFolderModal();
   showToast(`資料夾「${name}」已建立`);
 };
