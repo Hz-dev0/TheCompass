@@ -159,10 +159,11 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   border-radius: var(--radius); cursor: pointer; position: relative;
   transition: background var(--transition), border-color var(--transition), padding-left var(--transition);
   border: 1px solid transparent; border-left: 3px solid transparent;
+  min-width: 0;
 }
-.article-row:hover { background: var(--surface); border-color: var(--border); border-left-color: var(--accent); padding-left: 8px; }
+.article-row:hover { background: var(--surface); border-color: var(--border); border-left: 3px solid var(--accent); padding-left: 8px; }
 .article-row.drag-dragging { opacity: 0.4; }
-.article-title { font-size: 13px; color: var(--text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.article-title { font-size: 13px; color: var(--text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .article-date { font-size: 11px; color: var(--text3); flex-shrink: 0; }
 .article-tags { display: flex; gap: 3px; flex-shrink: 0; }
 .article-tag { font-size: 10px; padding: 1px 6px; border-radius: 10px; background: var(--surface2); color: var(--text3); border: 1px solid var(--border); }
@@ -459,7 +460,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 
 /* Article body */
 .art-body-rendered {
-  font-family: var(--font-serif); font-size: 16px; line-height: 1.95;
+  font-family: var(--font-serif); font-size: var(--reading-font-size, 16px); line-height: 1.95;
   color: var(--text); word-break: break-word; max-width: 65ch; margin: 0 auto;
 }
 .art-body-rendered mark {
@@ -769,6 +770,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 
   .notes-pane-label { font-size: 13px; }
   #reading-tap-hint {
+    display: block !important;
     position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
     background: rgba(26,25,22,0.55); color: #fff; border-radius: 20px;
     padding: 5px 14px; font-size: 11px; pointer-events: none;
@@ -898,6 +900,8 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
       </button>
       <button class="tb-btn" id="tb-tts-btn" onclick="toggleTTS()" oncontextmenu="openTTSSpeedMenu(event)" title="朗讀（右鍵調語速）">🔊</button>
+      <button class="tb-btn" onclick="changeFontSize(-1)" title="縮小字體" style="font-size:15px;font-weight:500;letter-spacing:-1px">－</button>
+      <button class="tb-btn" onclick="changeFontSize(1)" title="放大字體" style="font-size:15px;font-weight:500">＋</button>
       <button class="tb-btn" id="tb-pin-btn" onclick="togglePin()" title="置頂">🔻</button>
       <button class="tb-btn" id="tb-ai-btn" onclick="runAiAnalysis()" title="AI分析">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="m9 12 2 2 4-4"/></svg>
@@ -1095,7 +1099,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 </div>
 
 <!-- Reading tap hint (mobile) -->
-<div id="reading-tap-hint">點擊畫面顯示工具列</div>
+<div id="reading-tap-hint" style="display:none">點擊畫面顯示工具列</div>
 
 <!-- API Key modal -->
 <div class="apikey-modal" id="apikey-modal">
@@ -1361,7 +1365,7 @@ function renderFolderTree() {
   }
 
   // Show children of current folder
-  const parentId = currentFolderId;
+  const parentId = (currentFolderId === '__uncat__' || currentFolderId === null) ? null : currentFolderId;
   const children = folders.filter(f => (f.parentId||null) === parentId);
   children.forEach(folder => {
     const count = articles.filter(a => a.folderId === folder.id).length;
@@ -1683,6 +1687,18 @@ function updateToolbarState(art) {
 window.autoResizeTitle = (el) => {
   el.style.height = 'auto';
   el.style.height = el.scrollHeight + 'px';
+};
+
+// ── Reading font size ──
+let readingFontSize = parseInt(localStorage.getItem('reading_font_size') || '16');
+function applyReadingFontSize() {
+  document.documentElement.style.setProperty('--reading-font-size', readingFontSize + 'px');
+}
+applyReadingFontSize();
+window.changeFontSize = (delta) => {
+  readingFontSize = Math.min(26, Math.max(12, readingFontSize + delta));
+  localStorage.setItem('reading_font_size', readingFontSize);
+  applyReadingFontSize();
 };
 
 window.scheduleFieldSave = (field, value) => {
