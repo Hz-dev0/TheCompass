@@ -109,16 +109,26 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .search-wrap {
   display: flex; align-items: center; gap: 6px;
   border: 1px solid var(--border2); border-radius: var(--radius);
-  background: var(--surface2); padding: 0 10px; height: 32px;
+  background: var(--surface2); padding: 0 6px 0 10px; height: 32px;
   overflow: hidden; max-width: 0; transition: max-width 0.25s ease, opacity 0.2s;
   opacity: 0;
 }
-.search-wrap.open { max-width: 200px; opacity: 1; }
+.search-wrap.open { max-width: 220px; opacity: 1; }
 .search-wrap input {
   border: none; background: transparent; outline: none;
-  font-size: 13px; color: var(--text); width: 160px; font-family: var(--font-sans);
+  font-size: 13px; color: var(--text); width: 140px; font-family: var(--font-sans);
 }
 .search-wrap input::placeholder { color: var(--text3); }
+.search-clear {
+  width: 18px; height: 18px; border-radius: 50%; border: none;
+  background: var(--border2); color: var(--text2);
+  display: none; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0; font-size: 10px; font-weight: 700;
+  transition: background var(--transition), opacity 0.15s;
+  padding: 0; line-height: 1;
+}
+.search-clear:hover { background: var(--accent); color: #fff; }
+.search-clear.visible { display: flex; }
 
 /* ── Main content ── */
 .content-area { display: flex; flex: 1; overflow: hidden; }
@@ -222,27 +232,28 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .article-row {
   display: flex; align-items: center; flex-wrap: wrap; gap: 2px 8px; padding: 7px 10px;
   border-radius: var(--radius); cursor: pointer; position: relative;
-  transition: background var(--transition);
+  transition: background var(--transition), transform 0.18s ease;
   border: 1px solid transparent;
   min-width: 0; overflow: hidden;
 }
 .article-row::before {
-  content: ''; position: absolute; left: 0; top: 4px; bottom: 4px;
-  width: 3px; border-radius: 3px;
-  background: var(--accent);
-  transform: scaleY(0);
-  transform-origin: center;
-  opacity: 0;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s ease;
+  content: ''; position: absolute; bottom: 0; left: 12px; right: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--accent), rgba(176,88,112,0.15));
+  transform: scaleX(0); transform-origin: left;
+  transition: transform 0.25s ease;
   pointer-events: none;
 }
 .article-row:hover {
-  background: rgba(252,224,232,0.4);
-  border-color: rgba(176,88,112,0.15);
+  background: rgba(252,224,232,0.3);
+  transform: translateX(5px);
 }
 .article-row:hover::before {
-  opacity: 1;
-  transform: scaleY(1);
+  transform: scaleX(1);
+}
+.article-row:hover .article-row-dot {
+  transform: scale(1.7);
+  background: var(--accent) !important;
 }
 .article-row.drag-dragging { opacity: 0.4; }
 .article-row.pinned { border-left: 3px solid var(--danger); padding-left: 7px; }
@@ -706,6 +717,9 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 
 #tag-toggle-btn.active { background:var(--accent-light);border-color:var(--accent);color:var(--accent); }
 
+/* Tag bar open state */
+.tag-bar.open { display:flex !important; max-width:600px !important; overflow-x:auto; }
+
 /* Highlight mode */
 .art-body-rendered.highlight-mode { cursor: text; }
 .art-body-rendered.highlight-mode ::selection { background: #ffd6e4; }
@@ -921,7 +935,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
     <button class="icon-btn" id="tag-toggle-btn" title="標籤篩選" onclick="toggleTagBar()" style="flex-shrink:0;font-size:15px;border:none;background:transparent;padding:0 4px">
       🏷️
     </button>
-    <div class="tag-bar" id="tag-bar" style="display:none;max-width:0;overflow:hidden;transition:max-width 0.25s ease">
+    <div class="tag-bar" id="tag-bar" style="max-width:0;overflow:hidden;transition:max-width 0.25s ease,opacity 0.2s ease;display:none">
       <button class="tag-pill active" data-tag="__all__" onclick="filterTag(this)">全部</button>
     </div>
 
@@ -929,8 +943,9 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
     <div class="topbar-actions" style="margin-left:auto">
       <!-- Search -->
       <div class="search-wrap" id="search-wrap">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:14px;height:14px;color:var(--text3)"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <input id="search-input" placeholder="搜尋標題、內文…" oninput="filterArticles()" />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:14px;height:14px;color:var(--text3);flex-shrink:0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="search-input" placeholder="搜尋標題、內文…" oninput="filterArticles();updateSearchClear()" autocomplete="off" />
+        <button class="search-clear" id="search-clear" onclick="clearSearch()" title="清除">✕</button>
       </div>
       <button class="icon-btn" id="search-btn" title="搜尋" onclick="toggleSearch()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -1600,13 +1615,13 @@ function renderArticleList() {
     // Dot: pinned=red circle > favorite=❤️ > done=dash > pending=grey circle
     let dotHtml;
     if (art.pinned) {
-      dotHtml = '<span style="width:9px;height:9px;border-radius:50%;background:var(--danger);flex-shrink:0;display:inline-block" title="置頂"></span>';
+      dotHtml = '<span class="article-row-dot" style="width:9px;height:9px;border-radius:50%;background:var(--danger);flex-shrink:0;display:inline-block;transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1),background 0.15s" title="置頂"></span>';
     } else if (art.favorite) {
-      dotHtml = '<span style="font-size:11px;flex-shrink:0;line-height:1" title="收藏">❤️</span>';
+      dotHtml = '<span class="article-row-dot" style="font-size:11px;flex-shrink:0;line-height:1;transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1)" title="收藏">❤️</span>';
     } else if (art.readStatus === 'done') {
-      dotHtml = '<span style="font-size:12px;flex-shrink:0;color:var(--text3);font-weight:600;line-height:1" title="已閱">—</span>';
+      dotHtml = '<span class="article-row-dot" style="font-size:12px;flex-shrink:0;color:var(--text3);font-weight:600;line-height:1;transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1)" title="已閱">—</span>';
     } else {
-      dotHtml = '<span style="width:7px;height:7px;border-radius:50%;background:var(--border2);flex-shrink:0;display:inline-block" title="待閱"></span>';
+      dotHtml = '<span class="article-row-dot" style="width:7px;height:7px;border-radius:50%;background:var(--border2);flex-shrink:0;display:inline-block;transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1),background 0.15s" title="待閱"></span>';
     }
     // Body snippet when searching
     let snippetHtml = '';
@@ -1642,6 +1657,19 @@ function renderArticleList() {
 }
 
 window.filterArticles = () => renderArticleList();
+
+window.updateSearchClear = () => {
+  const val = document.getElementById('search-input')?.value || '';
+  const btn = document.getElementById('search-clear');
+  if (btn) btn.classList.toggle('visible', val.length > 0);
+};
+
+window.clearSearch = () => {
+  const input = document.getElementById('search-input');
+  if (input) { input.value = ''; input.focus(); }
+  updateSearchClear();
+  renderArticleList();
+};
 
 // ── Highlight tooltip ──
 function showHighlightTooltip(e, text) {
@@ -2528,8 +2556,8 @@ window.toggleSearch = () => {
   const btn = document.getElementById('search-btn');
   wrap.classList.toggle('open', searchOpen);
   btn.classList.toggle('active', searchOpen);
-  if (searchOpen) setTimeout(() => document.getElementById('search-input').focus(), 250);
-  else { document.getElementById('search-input').value = ''; renderArticleList(); }
+  if (searchOpen) setTimeout(() => { document.getElementById('search-input').focus(); }, 250);
+  else { document.getElementById('search-input').value = ''; updateSearchClear(); renderArticleList(); }
 };
 
 function openMobileSearch() {
@@ -2588,12 +2616,20 @@ window.toggleTagBar = () => {
     toggleMobileTagPopover();
     return;
   }
-  // Desktop: original behaviour
   const bar = document.getElementById('tag-bar');
   const btn = document.getElementById('tag-toggle-btn');
   const isOpen = bar.classList.contains('open');
-  bar.classList.toggle('open', !isOpen);
-  btn.classList.toggle('active', !isOpen);
+  if (isOpen) {
+    bar.classList.remove('open');
+    btn.classList.remove('active');
+    setTimeout(() => { if (!bar.classList.contains('open')) bar.style.display = 'none'; }, 250);
+  } else {
+    bar.style.display = 'flex';
+    requestAnimationFrame(() => {
+      bar.classList.add('open');
+      btn.classList.add('active');
+    });
+  }
 };
 
 function toggleMobileTagPopover() {
