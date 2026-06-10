@@ -478,16 +478,35 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 
 /* Article title bar */
 .reading-title-bar {
-  padding: 16px 24px 12px; background: var(--surface);
+  padding: 20px 24px 12px; background: var(--surface);
   border-bottom: 1px solid var(--border); flex-shrink: 0;
   transition: all 0.2s ease;
 }
 .reading-title-bar.collapsed { display: none; }
+.reading-title-top {
+  display: flex; align-items: flex-start; gap: 12px;
+}
 .reading-title-input {
-  width: 100%; font-family: var(--font-serif); font-size: 22px; font-weight: 500;
+  flex: 1; font-family: var(--font-serif); font-size: 22px; font-weight: 500;
   color: var(--text); background: transparent; border: none; outline: none;
   line-height: 1.4; resize: none; overflow: hidden;
+  text-align: center;
 }
+.reading-author-wrap {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  flex-shrink: 0; min-width: 90px;
+}
+.reading-author-label {
+  font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em;
+}
+.reading-author-input {
+  font-size: 13px; color: var(--text2); background: transparent;
+  border: none; border-bottom: 1px solid transparent; outline: none;
+  font-family: var(--font-sans); text-align: right; width: 100%;
+  transition: border-color 0.15s; padding: 1px 0;
+}
+.reading-author-input:focus { border-bottom-color: var(--accent); }
+.reading-author-input::placeholder { color: var(--text3); }
 .reading-meta-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .reading-meta-tag {
   font-size: 11px; padding: 2px 8px; border-radius: 20px;
@@ -599,22 +618,23 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 .settings-modal.open { display: flex; }
 .settings-card {
   background: var(--surface); border-radius: var(--radius-lg);
-  width: 460px; max-width: 95vw; max-height: 85vh;
+  width: 380px; max-width: 95vw; max-height: 80vh;
   box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden;
 }
 .settings-tabs {
   display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
 .settings-tab {
-  flex: 1; padding: 12px; text-align: center; font-size: 13px; cursor: pointer;
+  flex: 1; padding: 10px 8px; text-align: center; font-size: 12px; cursor: pointer;
   color: var(--text2); border-bottom: 2px solid transparent; transition: all var(--transition);
+  letter-spacing: .02em;
 }
 .settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
-.settings-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.settings-body { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
 .settings-section-title { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; }
-.settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.settings-row label { font-size: 13px; color: var(--text2); }
-.settings-row select, .settings-row input[type=range] { flex: 1; max-width: 200px; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; }
+.settings-row label { font-size: 13px; color: var(--text2); flex-shrink: 0; }
+.settings-row select, .settings-row input[type=range] { flex: 1; max-width: 180px; }
 .settings-row select {
   padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius);
   font-size: 13px; font-family: var(--font-sans); color: var(--text);
@@ -956,7 +976,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
       <button class="icon-btn" title="設定" onclick="openSettings('tts')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
-      <div id="user-avatar-wrap"></div>
+      <!-- no avatar in topbar -->
     </div>
   </div>
 
@@ -1037,7 +1057,13 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   <!-- Title bar -->
   <div class="reading-title-bar" id="reading-title-bar">
     <div id="reading-progress-bar"></div>
-    <textarea class="reading-title-input" id="reading-title-input" rows="1" oninput="autoResizeTitle(this); scheduleFieldSave('title', this.value)"></textarea>
+    <div class="reading-title-top">
+      <textarea class="reading-title-input" id="reading-title-input" rows="1" oninput="autoResizeTitle(this); scheduleFieldSave('title', this.value)"></textarea>
+      <div class="reading-author-wrap">
+        <span class="reading-author-label">作者</span>
+        <input class="reading-author-input" id="reading-author-input" placeholder="未填寫" oninput="scheduleFieldSave('author', this.value)" />
+      </div>
+    </div>
     <div class="reading-meta-row" id="reading-meta-row"></div>
   </div>
 
@@ -1068,10 +1094,10 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 <div class="settings-modal" id="settings-modal">
   <div class="settings-card">
     <div class="settings-tabs">
-      <div class="settings-tab active" onclick="switchSettingsTab('tts')">🔊 TTS</div>
-      <div class="settings-tab" onclick="switchSettingsTab('appearance')">🔤 外觀</div>
-      <div class="settings-tab" onclick="switchSettingsTab('account')">👤 帳號</div>
-      <div class="settings-tab" onclick="switchSettingsTab('export')">📤 匯出</div>
+      <div class="settings-tab active" onclick="switchSettingsTab('tts')">TTS</div>
+      <div class="settings-tab" onclick="switchSettingsTab('appearance')">外觀</div>
+      <div class="settings-tab" onclick="switchSettingsTab('account')">帳號</div>
+      <div class="settings-tab" onclick="switchSettingsTab('export')">匯出</div>
     </div>
     <div class="settings-body" id="settings-body"></div>
   </div>
@@ -1774,6 +1800,9 @@ function renderReadingPage(art) {
   const titleEl = document.getElementById('reading-title-input');
   titleEl.value = art.title || '';
   autoResizeTitle(titleEl);
+  // Author
+  const authorEl = document.getElementById('reading-author-input');
+  if (authorEl) authorEl.value = art.author || '';
   // Meta tags row
   const metaRow = document.getElementById('reading-meta-row');
   metaRow.innerHTML = (art.tags||[]).map(t =>
@@ -2707,22 +2736,26 @@ function renderSettingsBody() {
   const body = document.getElementById('settings-body');
   if (currentSettingsTab === 'export') {
     body.innerHTML = `
-      <div class="settings-section-title">匯出資料</div>
-      <p style="font-size:13px;color:var(--text2);line-height:1.6">將所有文章匯出為 JSON 檔案，可用於備份或遷移。</p>
-      <button class="btn btn-primary" onclick="exportData()">📤 匯出 JSON</button>
-      <div class="settings-section-title" style="margin-top:12px">自動儲存說明</div>
-      <p style="font-size:13px;color:var(--text2);line-height:1.6">文章內文與筆記在停止輸入後 <strong>2.5 秒</strong>自動儲存至 Firebase。閱讀工具列燈號亮起表示同步中/已儲存。</p>
+      <div class="settings-row">
+        <label>備份資料</label>
+        <button class="btn btn-primary" onclick="exportData()">匯出 JSON</button>
+      </div>
+      <div class="settings-row">
+        <label style="font-size:12px;color:var(--text3)">自動儲存</label>
+        <span style="font-size:12px;color:var(--text3)">停止輸入後 2.5 秒同步</span>
+      </div>
     `;
     return;
   }
   if (currentSettingsTab === 'tts') {
-    const voices = speechSynthesis.getVoices().filter(v => (v.lang.startsWith('zh-TW') || v.lang.startsWith('zh-CN') || v.lang.startsWith('cmn')) && !v.lang.includes('HK') && !v.name.toLowerCase().includes('cantonese') && !v.name.toLowerCase().includes('粵'));
+    const voices = speechSynthesis.getVoices().filter(v =>
+      (v.lang.startsWith('zh-TW') || v.lang.startsWith('zh-CN') || v.lang.startsWith('cmn'))
+      && !v.lang.includes('HK') && !v.name.toLowerCase().includes('cantonese') && !v.name.toLowerCase().includes('粵'));
     const savedVoice = localStorage.getItem('tts_voice') || '';
     const savedRate = localStorage.getItem('tts_rate') || '1';
     body.innerHTML = `
-      <div class="settings-section-title">語音設定</div>
       <div class="settings-row">
-        <label>人聲選擇</label>
+        <label>人聲</label>
         <select id="voice-select" onchange="localStorage.setItem('tts_voice',this.value)">
           <option value="">系統預設</option>
           ${voices.map(v=>`<option value="${escHtml(v.name)}" ${v.name===savedVoice?'selected':''}>${escHtml(v.name)}</option>`).join('')}
@@ -2730,32 +2763,40 @@ function renderSettingsBody() {
       </div>
       <div class="settings-row">
         <label>語速</label>
-        <input type="range" min="0.5" max="2" step="0.1" value="${savedRate}"
+        <input type="range" min="0.5" max="2" step="0.1" value="${savedRate}" style="flex:1"
           oninput="localStorage.setItem('tts_rate',this.value);document.getElementById('speed-val').textContent=parseFloat(this.value).toFixed(1)+'x'" />
         <span class="speed-val" id="speed-val">${parseFloat(savedRate).toFixed(1)}x</span>
       </div>
-      <button class="btn" onclick="speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance('測試語音，你好！'),{lang:'zh-TW',rate:parseFloat(localStorage.getItem('tts_rate')||1),voice:speechSynthesis.getVoices().find(v=>v.name===localStorage.getItem('tts_voice'))||null}))">▶ 測試</button>
+      <div class="settings-row">
+        <label></label>
+        <button class="btn" onclick="speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance('測試語音，你好！'),{lang:'zh-TW',rate:parseFloat(localStorage.getItem('tts_rate')||1),voice:speechSynthesis.getVoices().find(v=>v.name===localStorage.getItem('tts_voice'))||null}))">▶ 試聽</button>
+      </div>
     `;
   } else if (currentSettingsTab === 'appearance') {
     const savedSize = parseInt(localStorage.getItem('reading_font_size') || '16');
     body.innerHTML = `
-      <div class="settings-section-title">外觀設定</div>
       <div class="settings-row">
-        <label>預設閱讀字體大小</label>
+        <label>閱讀字體</label>
         <select onchange="applyDefaultFontSize(parseInt(this.value))">
           ${[12,13,14,15,16,17,18,20,22,24].map(s=>`<option value="${s}" ${s===savedSize?'selected':''}>${s}px</option>`).join('')}
         </select>
       </div>
-      <p style="font-size:12px;color:var(--text3);line-height:1.6">此設定為閱讀頁預設字體大小。開啟文章後也可以用右下角 ＋／－ 即時調整。</p>
     `;
   } else if (currentSettingsTab === 'account') {
+    const name = escHtml(currentUser?.displayName || currentUser?.email || '匿名');
+    const isAnon = currentUser?.isAnonymous;
     body.innerHTML = `
-      <div class="settings-section-title">帳號</div>
-      <div class="settings-row"><label>已登入為</label><span style="font-size:13px;color:var(--text2)">${escHtml(currentUser?.displayName||currentUser?.email||'匿名')}</span></div>
-      <div class="settings-section-title" style="margin-top:8px">匿名登入驗證碼</div>
-      <p style="font-size:13px;color:var(--text2);line-height:1.6">產生一組6位驗證碼，在另一台裝置以相同帳號匿名瀏覽，10分鐘內有效。</p>
-      <button class="btn btn-primary" onclick="generatePasscode()">產生驗證碼</button>
-      <div style="margin-top:8px">
+      <div class="settings-row">
+        <label>帳號</label>
+        <span style="font-size:13px;color:var(--text2)">${name}</span>
+      </div>
+      ${!isAnon ? `
+      <div class="settings-row">
+        <label>匿名驗證碼</label>
+        <button class="btn btn-primary" onclick="generatePasscode()">產生</button>
+      </div>` : ''}
+      <div class="settings-row" style="margin-top:4px">
+        <label></label>
         <button class="btn btn-danger" onclick="if(confirm('確定登出？'))signOut(auth)">登出</button>
       </div>
     `;
@@ -2782,18 +2823,22 @@ window.copyPasscode = () => {
 window.loginWithPasscode = async () => {
   const code = document.getElementById('passcode-input').value.trim();
   if (code.length !== 6) { showToast('請輸入6位驗證碼'); return; }
+  const btn = document.querySelector('#auth-screen .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = '驗證中…'; }
   try {
-    const snap = await getDocs(query(collection(db, 'passcodes'), where('__name__', '==', code)))
-      .then(() => getDoc(doc(db, 'passcodes', code)));
+    const snap = await getDoc(doc(db, 'passcodes', code));
     if (!snap.exists()) { showToast('驗證碼無效'); return; }
     const data = snap.data();
     if (Date.now() > data.expires) { showToast('驗證碼已過期'); return; }
-    // Store the GOOGLE user's uid — ensures anonymous login reads the same Firestore data
     localStorage.setItem('passcode_uid', data.uid);
     localStorage.setItem('passcode_expires', data.expires);
-    showToast('驗證碼正確，以匿名模式登入中…');
+    showToast('驗證成功，載入中…');
     loadAnonymousData(data.uid);
-  } catch(e) { showToast('登入失敗：' + e.message); }
+  } catch(e) {
+    showToast('登入失敗：' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '匿名登入'; }
+  }
 };
 
 function loadAnonymousData(uid) {
