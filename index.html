@@ -247,6 +247,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .article-row:hover {
   background: rgba(252,224,232,0.3);
   transform: translateX(5px);
+  cursor: pointer;
 }
 .article-row:hover::before {
   transform: scaleX(1);
@@ -258,6 +259,11 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .article-row.drag-dragging { opacity: 0.4; }
 .article-row.pinned { border-left: 3px solid var(--danger); padding-left: 7px; }
 .article-title { font-size: 13px; color: var(--text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; line-height: 1.4; }
+.article-author {
+  font-size: 11px; color: var(--text3); flex-shrink: 0;
+  max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-style: italic;
+}
 .article-date { font-size: 11px; color: var(--text3); flex-shrink: 0; }
 .article-tags { display: flex; gap: 3px; flex-shrink: 0; }
 .article-tag { font-size: 10px; padding: 1px 6px; border-radius: 10px; background: var(--surface2); color: var(--text3); border: 1px solid var(--border); }
@@ -618,7 +624,8 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 .settings-modal.open { display: flex; }
 .settings-card {
   background: var(--surface); border-radius: var(--radius-lg);
-  width: 380px; max-width: 95vw; max-height: 80vh;
+  width: 380px; max-width: 95vw;
+  height: 320px;
   box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden;
 }
 .settings-tabs {
@@ -822,6 +829,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 
   /* Article list: hide tags and date, show only title+dot */
   .article-date { display: none; }
+  .article-author { display: none; }
   .article-tags { display: none; }
   .article-title { font-size: 14px; }
 
@@ -1262,7 +1270,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, getDocs, onSnapshot, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDVJPG00SlAS9Vku4MuJYHq2reB2ENRClE",
@@ -1664,7 +1672,8 @@ function renderArticleList() {
         snippetHtml = `<span class="article-snippet">${snippetInner}</span>`;
       }
     }
-    row.innerHTML = `${dotHtml}<span class="article-title">${titleHtml}</span><div class="article-tags">${tagsHtml}</div><span class="article-date">${dateStr}</span>${snippetHtml}`;
+    const authorHtml = art.author ? `<span class="article-author" title="${escHtml(art.author)}">${escHtml(art.author)}</span>` : '';
+    row.innerHTML = `${dotHtml}<span class="article-title">${titleHtml}</span>${authorHtml}<div class="article-tags">${tagsHtml}</div><span class="article-date">${dateStr}</span>${snippetHtml}`;
     if (art.pinned) row.classList.add('pinned');
     row.onclick = () => openReading(art.id);
     row.addEventListener('dragstart', e => {
