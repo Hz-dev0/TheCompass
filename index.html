@@ -235,11 +235,10 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   transition: background var(--transition), transform 0.18s ease;
   border: 1px solid transparent;
   min-width: 0; overflow: hidden;
-  perspective: 80px;
 }
 @keyframes spin-diamond {
-  0%   { transform: translateY(-50%) rotate(45deg) rotateY(0deg); }
-  100% { transform: translateY(-50%) rotate(45deg) rotateY(360deg); }
+  0%   { transform: translateY(-50%) rotate(45deg); }
+  100% { transform: translateY(-50%) rotate(405deg); }
 }
 .article-row::before {
   content: ''; position: absolute; bottom: 0; left: 12px; right: 12px;
@@ -255,7 +254,6 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   width: 8px; height: 8px;
   background: var(--accent);
   transform: translateY(-50%) rotate(45deg);
-  transform-style: preserve-3d;
   opacity: 0; transition: opacity 0.15s;
   pointer-events: none;
 }
@@ -287,9 +285,9 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 
 /* Batch mode */
 .batch-bar {
-  display: none; align-items: center; gap: 8px; padding: 6px 12px;
-  background: var(--accent-light); border-bottom: 1px solid var(--accent);
-  flex-shrink: 0; font-size: 12px; color: var(--accent);
+  display: none; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--accent);
+  margin-left: auto;
 }
 .batch-bar.visible { display: flex; }
 .batch-bar-count { font-weight: 500; flex: 1; }
@@ -1017,7 +1015,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
     </div>
 
     <!-- Actions -->
-    <div class="topbar-actions" style="margin-left:auto">
+    <div class="topbar-actions" style="margin-left:auto" id="topbar-actions">
       <!-- Search -->
       <div class="search-wrap" id="search-wrap">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:14px;height:14px;color:var(--text3);flex-shrink:0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -1038,6 +1036,16 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
       </button>
       <div id="user-avatar-wrap"></div>
     </div>
+
+    <!-- Batch bar (replaces actions when batch mode active) -->
+    <div class="batch-bar" id="batch-bar">
+      <span class="batch-bar-count" id="batch-count">已選 0 篇</span>
+      <button class="batch-btn" onclick="batchMoveFolder()">移資料夾</button>
+      <button class="batch-btn" onclick="batchAddTag()">加標籤</button>
+      <button class="batch-btn" onclick="batchMarkDone()">標為已讀</button>
+      <button class="batch-btn danger" onclick="batchDelete()">刪除</button>
+      <button class="batch-btn" onclick="toggleBatchMode()">取消</button>
+    </div>
   </div>
 
   <!-- Content -->
@@ -1053,16 +1061,6 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
         </div>
         <div class="folder-tree" id="folder-tree"></div>
       </div>
-    </div>
-
-    <!-- Batch bar -->
-    <div class="batch-bar" id="batch-bar">
-      <span class="batch-bar-count" id="batch-count">已選 0 篇</span>
-      <button class="batch-btn" onclick="batchMoveFolder()">移資料夾</button>
-      <button class="batch-btn" onclick="batchAddTag()">加標籤</button>
-      <button class="batch-btn" onclick="batchMarkDone()">標為已讀</button>
-      <button class="batch-btn danger" onclick="batchDelete()">刪除</button>
-      <button class="batch-btn" onclick="toggleBatchMode()">取消</button>
     </div>
 
     <!-- Article list -->
@@ -1802,7 +1800,7 @@ window.toggleBatchMode = () => {
   batchSelected.clear();
   document.body.classList.toggle('batch-active', batchMode);
   document.getElementById('batch-bar').classList.toggle('visible', batchMode);
-  document.getElementById('batch-toggle-btn').classList.toggle('active', batchMode);
+  document.getElementById('topbar-actions').style.display = batchMode ? 'none' : '';
   renderArticleList();
 };
 
