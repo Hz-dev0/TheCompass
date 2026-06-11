@@ -479,7 +479,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(40px);
   background: #3a1f28; color: #fce8ee; padding: 9px 20px; border-radius: 20px;
-  font-size: 13px; z-index: 900; transition: all 0.25s ease; opacity: 0; pointer-events: none;
+  font-size: 13px; z-index: 1100; transition: all 0.25s ease; opacity: 0; pointer-events: none;
   box-shadow: 0 4px 16px rgba(176,88,112,0.25);
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -1381,6 +1381,13 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
+
+// DEBUG: expose internals to window for console testing
+window.__debug = { auth, db, getDoc, doc, setDoc, signInAnonymously: null, getAuth, getFirestore, fbApp };
+import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js').then(m => {
+  window.__debug.signInAnonymously = m.signInAnonymously;
+  console.log('[debug] window.__debug ready', window.__debug);
+});
 
 // ── State ──
 let currentUser = null;
@@ -3105,26 +3112,35 @@ window.copyPasscode = () => {
 
 console.log('[boot] defining loginWithPasscode');
 window.loginWithPasscode = async () => {
+  console.log('[LP] start');
   const code = document.getElementById('passcode-input').value.trim();
+  console.log('[LP] code=', code, 'len=', code.length);
   if (code.length !== 6) { showToast('請輸入6位驗證碼'); return; }
   const btn = document.querySelector('#auth-screen .btn-primary');
   if (btn) { btn.disabled = true; btn.textContent = '驗證中…'; }
   try {
     // Step 1: read passcode (rules allow public read)
+    console.log('[LP] step1: getDoc passcode...');
     const snap = await getDoc(doc(db, 'passcodes', code));
+    console.log('[LP] step1 done, exists=', snap.exists());
     if (!snap.exists()) { showToast('驗證碼無效'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     const data = snap.data();
+    console.log('[LP] data=', data);
     if (Date.now() > data.expires) { showToast('驗證碼已過期'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     if (data.used) { showToast('驗證碼已使用過'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     // Step 2: sign in anonymously to get a real Firebase Auth token
+    console.log('[LP] step2: importing firebase-auth...');
     const { signInAnonymously: _sia } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+    console.log('[LP] step2: import done, calling signInAnonymously...');
     const anonCred = await Promise.race([
       _sia(auth),
       new Promise((_, rej) => setTimeout(() => rej(new Error('登入逾時，請檢查網路或匿名登入是否已啟用')), 10000))
     ]);
+    console.log('[LP] step2 done, anonUid=', anonCred.user.uid);
     const anonUid = anonCred.user.uid;
     // Step 3: write delegate mapping so Firestore rules permit cross-uid reads.
     // Best-effort: don't let a rules/permission issue here block the login flow.
+    console.log('[LP] step3: writing delegate doc...');
     try {
       await setDoc(doc(db, 'delegates', anonUid), { ownerUid: data.uid });
       console.log('[passcode] delegate written:', anonUid, '->', data.uid);
@@ -3132,12 +3148,15 @@ window.loginWithPasscode = async () => {
       console.error('[passcode] delegate write failed', e2);
     }
     // Step 3b: mark passcode as used (best-effort, single-use enforcement)
+    console.log('[LP] step3b: marking passcode used...');
     try {
       await setDoc(doc(db, 'passcodes', code), { used: true, anonUid }, { merge: true });
+      console.log('[LP] step3b done');
     } catch (e3) {
       console.warn('passcode mark-used failed', e3);
     }
     // Step 4: store locally
+    console.log('[LP] step4: finalizing session...');
     localStorage.setItem('passcode_uid', data.uid);
     localStorage.setItem('passcode_code', code);
     localStorage.setItem('passcode_expires', data.expires);
@@ -3150,8 +3169,11 @@ window.loginWithPasscode = async () => {
     document.getElementById('app').classList.add('visible');
     document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
     passcodeTargetUid = null;
+    console.log('[LP] step5: subscribeData...');
     subscribeData();
+    console.log('[LP] ALL DONE');
   } catch(e) {
+    console.error('[LP] CAUGHT ERROR:', e);
     showToast('登入失敗：' + e.message);
     if (btn) { btn.disabled = false; btn.textContent = '匿名登入'; }
   }
