@@ -244,6 +244,13 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   transition: transform 0.25s ease;
   pointer-events: none;
 }
+.article-row::after {
+  content: '';
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  font-size: 13px; line-height: 1;
+  opacity: 0; transition: opacity 0.15s;
+  pointer-events: none;
+}
 .article-row:hover {
   background: rgba(252,224,232,0.3);
   transform: translateX(5px);
@@ -252,10 +259,12 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .article-row:hover::before {
   transform: scaleX(1);
 }
-.article-row:hover .article-row-dot {
-  transform: scale(1.7);
-  background: var(--accent) !important;
+.article-row:hover::after {
+  content: '👆';
+  opacity: 1;
 }
+.article-row-dot { transition: opacity 0.15s; }
+.article-row:hover .article-row-dot { opacity: 0; }
 .article-row.drag-dragging { opacity: 0.4; }
 .article-row.pinned { border-left: 3px solid var(--danger); padding-left: 7px; }
 .article-title { font-size: 13px; color: var(--text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; line-height: 1.4; }
@@ -637,7 +646,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   letter-spacing: .02em;
 }
 .settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
-.settings-body { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.settings-body { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; justify-content: center; }
 .settings-section-title { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; }
 .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; }
 .settings-row label { font-size: 13px; color: var(--text2); flex-shrink: 0; }
@@ -1302,6 +1311,7 @@ let pendingHighlightText = '';
 let searchOpen = false;
 let saveTimeout = null;
 let selectionRange = null;
+let passcodeTargetUid = null; // uid to load data for when using passcode login
 
 // ── Auth ──
 window.signInWithGoogle = async () => {
@@ -1326,11 +1336,25 @@ getRedirectResult(auth).catch(e => {
 
 onAuthStateChanged(auth, user => {
   if (user) {
-    currentUser = user;
-    document.getElementById('auth-screen').style.display = 'none';
-    document.getElementById('app').classList.add('visible');
-    renderUserAvatar();
-    subscribeData();
+    // If this is an anonymous sign-in triggered by passcode, load the target uid's data
+    if (user.isAnonymous && passcodeTargetUid) {
+      currentUser = { uid: passcodeTargetUid, displayName: '匿名', photoURL: null, isAnonymous: true };
+      document.getElementById('auth-screen').style.display = 'none';
+      document.getElementById('app').classList.add('visible');
+      document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
+      subscribeData();
+      passcodeTargetUid = null;
+    } else if (!user.isAnonymous) {
+      currentUser = user;
+      document.getElementById('auth-screen').style.display = 'none';
+      document.getElementById('app').classList.add('visible');
+      renderUserAvatar();
+      subscribeData();
+    }
+    // anonymous user without passcodeTargetUid = stale session, sign out
+    else {
+      import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js').then(({signOut: so}) => so(auth));
+    }
   } else {
     currentUser = null;
     document.getElementById('auth-screen').style.display = 'flex';
@@ -1348,7 +1372,14 @@ function renderUserAvatar() {
   }
 }
 
-window.doSignOut = () => { if(confirm('確定要登出嗎？')) signOut(auth); };
+window.doSignOut = () => {
+  if(confirm('確定要登出嗎？')) {
+    localStorage.removeItem('passcode_uid');
+    localStorage.removeItem('passcode_expires');
+    localStorage.removeItem('passcode_code');
+    signOut(auth);
+  }
+};
 
 // ── Firestore Subscribe ──
 function subscribeData() {
@@ -2835,17 +2866,26 @@ window.loginWithPasscode = async () => {
   const btn = document.querySelector('#auth-screen .btn-primary');
   if (btn) { btn.disabled = true; btn.textContent = '驗證中…'; }
   try {
+    // Step 1: read passcode (rules allow public read)
     const snap = await getDoc(doc(db, 'passcodes', code));
-    if (!snap.exists()) { showToast('驗證碼無效'); return; }
+    if (!snap.exists()) { showToast('驗證碼無效'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     const data = snap.data();
-    if (Date.now() > data.expires) { showToast('驗證碼已過期'); return; }
+    if (Date.now() > data.expires) { showToast('驗證碼已過期'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
+    // Step 2: sign in anonymously to get a real Firebase Auth token
+    const { signInAnonymously: _sia } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+    const anonCred = await _sia(auth);
+    const anonUid = anonCred.user.uid;
+    // Step 3: write anonUid→ownerUid mapping into passcode doc (passcodes allow create/update if auth != null)
+    await setDoc(doc(db, 'passcodes', code), { anonUid }, { merge: true });
+    // Step 4: store locally
     localStorage.setItem('passcode_uid', data.uid);
+    localStorage.setItem('passcode_code', code);
     localStorage.setItem('passcode_expires', data.expires);
+    passcodeTargetUid = data.uid;
     showToast('驗證成功，載入中…');
-    loadAnonymousData(data.uid);
+    // onAuthStateChanged will fire and call subscribeData
   } catch(e) {
     showToast('登入失敗：' + e.message);
-  } finally {
     if (btn) { btn.disabled = false; btn.textContent = '匿名登入'; }
   }
 };
@@ -2859,14 +2899,23 @@ function loadAnonymousData(uid) {
 }
 
 // Check saved passcode on load
-(function checkPasscode() {
+(async function checkPasscode() {
   const uid = localStorage.getItem('passcode_uid');
   const exp = parseInt(localStorage.getItem('passcode_expires') || '0');
   if (uid && Date.now() < exp) {
-    // Will be overridden by onAuthStateChanged if Google user exists
-    setTimeout(() => {
-      if (!currentUser) loadAnonymousData(uid);
-    }, 1500);
+    await new Promise(r => setTimeout(r, 1200));
+    if (!currentUser) {
+      try {
+        const { signInAnonymously: _sia } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+        passcodeTargetUid = uid;
+        await _sia(auth);
+        // onAuthStateChanged handles the rest
+      } catch(e) {
+        localStorage.removeItem('passcode_uid');
+        localStorage.removeItem('passcode_expires');
+        localStorage.removeItem('passcode_code');
+      }
+    }
   }
 })();
 
