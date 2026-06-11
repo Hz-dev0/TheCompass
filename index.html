@@ -236,6 +236,11 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   border: 1px solid transparent;
   min-width: 0; overflow: hidden;
 }
+@keyframes spin-diamond {
+  0%   { transform: translateY(-50%) rotate(0deg) scale(1); }
+  50%  { transform: translateY(-50%) rotate(180deg) scale(1.3); }
+  100% { transform: translateY(-50%) rotate(360deg) scale(1); }
+}
 .article-row::before {
   content: ''; position: absolute; bottom: 0; left: 12px; right: 12px;
   height: 1px;
@@ -246,8 +251,10 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 }
 .article-row::after {
   content: '';
-  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
-  font-size: 13px; line-height: 1;
+  position: absolute; left: 10px; top: 50%;
+  width: 8px; height: 8px;
+  background: var(--accent);
+  transform: translateY(-50%) rotate(45deg) scale(0);
   opacity: 0; transition: opacity 0.15s;
   pointer-events: none;
 }
@@ -260,8 +267,8 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   transform: scaleX(1);
 }
 .article-row:hover::after {
-  content: '👆';
   opacity: 1;
+  animation: spin-diamond 0.9s cubic-bezier(0.34,1.56,0.64,1) infinite;
 }
 .article-row-dot { transition: opacity 0.15s; }
 .article-row:hover .article-row-dot { opacity: 0; }
@@ -633,27 +640,30 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 .settings-modal.open { display: flex; }
 .settings-card {
   background: var(--surface); border-radius: var(--radius-lg);
-  width: 380px; max-width: 95vw;
-  height: 320px;
+  width: 360px; max-width: 95vw;
+  height: 240px;
   box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden;
 }
 .settings-tabs {
   display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  background: var(--surface2);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 .settings-tab {
-  flex: 1; padding: 10px 8px; text-align: center; font-size: 12px; cursor: pointer;
-  color: var(--text2); border-bottom: 2px solid transparent; transition: all var(--transition);
-  letter-spacing: .02em;
+  flex: 1; padding: 9px 8px; text-align: center; font-size: 11px; cursor: pointer;
+  color: var(--text3); border-bottom: 2px solid transparent; transition: all var(--transition);
+  letter-spacing: .04em; text-transform: uppercase;
 }
-.settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
-.settings-body { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; justify-content: center; }
+.settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; background: var(--surface); }
+.settings-body { flex: 1; overflow-y: auto; padding: 0 20px; display: flex; flex-direction: column; gap: 0; justify-content: center; }
 .settings-section-title { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; }
-.settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; }
-.settings-row label { font-size: 13px; color: var(--text2); flex-shrink: 0; }
-.settings-row select, .settings-row input[type=range] { flex: 1; max-width: 180px; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 38px; border-bottom: 1px solid var(--border); }
+.settings-row:last-child { border-bottom: none; }
+.settings-row label { font-size: 12px; color: var(--text2); flex-shrink: 0; letter-spacing: .02em; }
+.settings-row select, .settings-row input[type=range] { flex: 1; max-width: 160px; }
 .settings-row select {
-  padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius);
-  font-size: 13px; font-family: var(--font-sans); color: var(--text);
+  padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 12px; font-family: var(--font-sans); color: var(--text);
   background: var(--surface); outline: none;
 }
 .speed-val { font-size: 12px; color: var(--text3); min-width: 32px; text-align: right; }
@@ -1074,6 +1084,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   <!-- Title bar -->
   <div class="reading-title-bar" id="reading-title-bar">
     <div id="reading-progress-bar"></div>
+    <div class="reading-meta-row" id="reading-meta-row" style="margin-bottom:8px"></div>
     <div class="reading-title-top">
       <textarea class="reading-title-input" id="reading-title-input" rows="1" oninput="autoResizeTitle(this); scheduleFieldSave('title', this.value)"></textarea>
       <div class="reading-author-wrap">
@@ -1081,7 +1092,6 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
         <input class="reading-author-input" id="reading-author-input" placeholder="未填寫" oninput="scheduleFieldSave('author', this.value)" />
       </div>
     </div>
-    <div class="reading-meta-row" id="reading-meta-row"></div>
   </div>
 
   <!-- Body + Notes -->
@@ -1645,7 +1655,7 @@ function getFilteredArticles() {
   if (activeTag !== '__all__') list = list.filter(a => (a.tags||[]).includes(activeTag));
   // search
   const q = document.getElementById('search-input')?.value.trim().toLowerCase();
-  if (q) list = list.filter(a => a.title?.toLowerCase().includes(q) || a.body?.toLowerCase().includes(q));
+  if (q) list = list.filter(a => a.title?.toLowerCase().includes(q) || a.body?.toLowerCase().includes(q) || a.author?.toLowerCase().includes(q));
   return list;
 }
 
@@ -1987,6 +1997,14 @@ window.applyDefaultFontSize = (size) => {
 };
 
 window.scheduleFieldSave = (field, value) => {
+  // Immediately update local state so list reflects changes before cloud sync
+  if (currentArticleId) {
+    const art = articles.find(a => a.id === currentArticleId);
+    if (art) {
+      art[field] = value;
+      renderArticleList(); // refresh list immediately
+    }
+  }
   clearTimeout(saveTimeout);
   setSyncStatus('syncing');
   saveTimeout = setTimeout(async () => {
@@ -1995,7 +2013,7 @@ window.scheduleFieldSave = (field, value) => {
       await updateDoc(doc(db, 'articles', currentArticleId), { [field]: value });
       setSyncStatus('saved');
     } catch(e) { setSyncStatus('error'); }
-  }, 2500);
+  }, 800); // faster: 800ms instead of 2500ms for title/author
 };
 
 window.scheduleNotesSave = (value) => {
