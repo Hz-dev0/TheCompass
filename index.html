@@ -235,12 +235,11 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   transition: background var(--transition), transform 0.18s ease;
   border: 1px solid transparent;
   min-width: 0; overflow: hidden;
+  perspective: 80px;
 }
-@keyframes flip-diamond {
-  0%   { transform: translateY(-50%) rotate(45deg) scaleX(1); }
-  50%  { transform: translateY(-50%) rotate(45deg) scaleX(0); }
-  51%  { transform: translateY(-50%) rotate(45deg) scaleX(0); background: var(--accent2); }
-  100% { transform: translateY(-50%) rotate(45deg) scaleX(1); background: var(--accent2); }
+@keyframes spin-diamond {
+  0%   { transform: translateY(-50%) rotate(45deg) rotateY(0deg); }
+  100% { transform: translateY(-50%) rotate(45deg) rotateY(360deg); }
 }
 .article-row::before {
   content: ''; position: absolute; bottom: 0; left: 12px; right: 12px;
@@ -255,7 +254,8 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   position: absolute; left: 10px; top: 50%;
   width: 8px; height: 8px;
   background: var(--accent);
-  transform: translateY(-50%) rotate(45deg) scale(0);
+  transform: translateY(-50%) rotate(45deg);
+  transform-style: preserve-3d;
   opacity: 0; transition: opacity 0.15s;
   pointer-events: none;
 }
@@ -269,7 +269,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 }
 .article-row:hover::after {
   opacity: 1;
-  animation: flip-diamond 0.7s ease-in-out infinite;
+  animation: spin-diamond 1.2s linear infinite;
 }
 .article-row-dot { transition: opacity 0.15s; }
 .article-row:hover .article-row-dot { opacity: 0; }
@@ -285,7 +285,31 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .article-tags { display: flex; gap: 3px; flex-shrink: 0; }
 .article-tag { font-size: 10px; padding: 1px 6px; border-radius: 10px; background: var(--surface2); color: var(--text3); border: 1px solid var(--border); }
 
-/* Hover highlight tooltip */
+/* Batch mode */
+.batch-bar {
+  display: none; align-items: center; gap: 8px; padding: 6px 12px;
+  background: var(--accent-light); border-bottom: 1px solid var(--accent);
+  flex-shrink: 0; font-size: 12px; color: var(--accent);
+}
+.batch-bar.visible { display: flex; }
+.batch-bar-count { font-weight: 500; flex: 1; }
+.batch-btn {
+  padding: 4px 10px; border-radius: var(--radius); border: 1px solid var(--accent);
+  background: transparent; color: var(--accent); font-size: 11px; font-family: var(--font-sans);
+  cursor: pointer; transition: all var(--transition);
+}
+.batch-btn:hover { background: var(--accent); color: #fff; }
+.batch-btn.danger { border-color: var(--danger); color: var(--danger); }
+.batch-btn.danger:hover { background: var(--danger); color: #fff; }
+.article-row .batch-check {
+  display: none; width: 16px; height: 16px; flex-shrink: 0;
+  accent-color: var(--accent); cursor: pointer;
+}
+body.batch-active .article-row .batch-check { display: block; }
+body.batch-active .article-row-dot { display: none; }
+body.batch-active .article-row { cursor: default; }
+body.batch-active .article-row:hover { transform: none; }
+.article-row.batch-sel { background: var(--accent-light); border-color: rgba(176,88,112,0.3); }
 .highlight-tooltip {
   position: fixed; z-index: 500; background: var(--highlight-bg);
   border: 1px solid var(--highlight-border); border-radius: var(--radius);
@@ -530,7 +554,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 }
 .reading-author-input:focus { border-bottom-color: var(--accent); }
 .reading-author-input::placeholder { color: var(--text3); }
-.reading-meta-row { display: flex; align-items: center; gap: 6px; padding: 7px 0 8px; flex-wrap: wrap; border-bottom: 1px solid var(--border); margin-bottom: 12px; min-height: 34px; }
+.reading-meta-row { display: flex; align-items: center; gap: 6px; padding: 7px 0 4px; flex-wrap: wrap; margin-bottom: 10px; min-height: 34px; }
 .reading-meta-tag {
   font-size: 11px; padding: 2px 8px; border-radius: 20px;
   background: var(--accent-light); color: var(--accent);
@@ -641,21 +665,26 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 .settings-modal.open { display: flex; }
 .settings-card {
   background: var(--surface); border-radius: var(--radius-lg);
-  width: 360px; max-width: 95vw;
-  height: 240px;
-  box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden;
+  width: 400px; max-width: 95vw;
+  height: 230px;
+  box-shadow: var(--shadow-lg); display: flex; flex-direction: row; overflow: hidden;
 }
-.settings-tabs {
-  display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0;
-  background: var(--surface2);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+.settings-sidebar {
+  width: 64px; background: var(--surface2); flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 2px;
+  border-right: 1px solid var(--border);
 }
-.settings-tab {
-  flex: 1; padding: 9px 8px; text-align: center; font-size: 11px; cursor: pointer;
-  color: var(--text3); border-bottom: 2px solid transparent; transition: all var(--transition);
-  letter-spacing: .04em; text-transform: uppercase;
+.settings-nav-btn {
+  width: 44px; height: 44px; border-radius: var(--radius); border: none; background: transparent;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  cursor: pointer; color: var(--text3); transition: all var(--transition); font-size: 9px;
+  letter-spacing: .03em;
 }
-.settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; background: var(--surface); }
+.settings-nav-btn svg { width: 16px; height: 16px; }
+.settings-nav-btn:hover { background: var(--border); color: var(--text2); }
+.settings-nav-btn.active { background: var(--accent-light); color: var(--accent); }
+.settings-tabs { display: none; }
+.settings-tab { display: none; }
 .settings-body { flex: 1; overflow-y: auto; padding: 0 20px; display: flex; flex-direction: column; gap: 0; justify-content: center; }
 .settings-section-title { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; }
 .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 38px; border-bottom: 1px solid var(--border); }
@@ -998,6 +1027,9 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
       <button class="icon-btn" id="search-btn" title="搜尋" onclick="toggleSearch()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
       </button>
+      <button class="icon-btn" id="batch-toggle-btn" title="批次操作" onclick="toggleBatchMode()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="4" height="4" rx="1"/><rect x="3" y="12" width="4" height="4" rx="1"/><rect x="3" y="19" width="4" height="4" rx="1"/><path d="M10 7h11M10 14h11M10 21h11"/></svg>
+      </button>
       <button class="icon-btn btn-primary" title="新增文章" onclick="openNewModal()" style="background:var(--accent);border-color:var(--accent);color:#fff">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       </button>
@@ -1021,6 +1053,16 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
         </div>
         <div class="folder-tree" id="folder-tree"></div>
       </div>
+    </div>
+
+    <!-- Batch bar -->
+    <div class="batch-bar" id="batch-bar">
+      <span class="batch-bar-count" id="batch-count">已選 0 篇</span>
+      <button class="batch-btn" onclick="batchMoveFolder()">移資料夾</button>
+      <button class="batch-btn" onclick="batchAddTag()">加標籤</button>
+      <button class="batch-btn" onclick="batchMarkDone()">標為已讀</button>
+      <button class="batch-btn danger" onclick="batchDelete()">刪除</button>
+      <button class="batch-btn" onclick="toggleBatchMode()">取消</button>
     </div>
 
     <!-- Article list -->
@@ -1121,11 +1163,23 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 <!-- Settings modal -->
 <div class="settings-modal" id="settings-modal">
   <div class="settings-card">
-    <div class="settings-tabs">
-      <div class="settings-tab active" onclick="switchSettingsTab('tts')">TTS</div>
-      <div class="settings-tab" onclick="switchSettingsTab('appearance')">外觀</div>
-      <div class="settings-tab" onclick="switchSettingsTab('account')">帳號</div>
-      <div class="settings-tab" onclick="switchSettingsTab('export')">匯出</div>
+    <div class="settings-sidebar">
+      <button class="settings-nav-btn active" id="snav-tts" onclick="switchSettingsTab('tts')" title="語音朗讀">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+        TTS
+      </button>
+      <button class="settings-nav-btn" id="snav-appearance" onclick="switchSettingsTab('appearance')" title="外觀">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        外觀
+      </button>
+      <button class="settings-nav-btn" id="snav-account" onclick="switchSettingsTab('account')" title="帳號">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        帳號
+      </button>
+      <button class="settings-nav-btn" id="snav-export" onclick="switchSettingsTab('export')" title="匯出">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        匯出
+      </button>
     </div>
     <div class="settings-body" id="settings-body"></div>
   </div>
@@ -1323,6 +1377,8 @@ let searchOpen = false;
 let saveTimeout = null;
 let selectionRange = null;
 let passcodeTargetUid = null; // uid to load data for when using passcode login
+let batchMode = false;
+let batchSelected = new Set();
 
 // ── Auth ──
 window.signInWithGoogle = async () => {
@@ -1715,9 +1771,14 @@ function renderArticleList() {
       }
     }
     const authorHtml = art.author ? `<span class="article-author" title="${escHtml(art.author)}">${escHtml(art.author)}</span>` : '';
-    row.innerHTML = `${dotHtml}<span class="article-title">${titleHtml}</span>${authorHtml}<div class="article-tags">${tagsHtml}</div><span class="article-date">${dateStr}</span>${snippetHtml}`;
+    row.innerHTML = `<input type="checkbox" class="batch-check" ${batchSelected.has(art.id)?'checked':''} onclick="event.stopPropagation();toggleBatchSelect('${art.id}',this)">${dotHtml}<span class="article-title">${titleHtml}</span>${authorHtml}<div class="article-tags">${tagsHtml}</div><span class="article-date">${dateStr}</span>${snippetHtml}`;
     if (art.pinned) row.classList.add('pinned');
-    row.onclick = () => openReading(art.id);
+    if (batchSelected.has(art.id)) row.classList.add('batch-sel');
+    row.onclick = batchMode ? () => {
+      const cb = row.querySelector('.batch-check');
+      cb.checked = !cb.checked;
+      toggleBatchSelect(art.id, cb);
+    } : () => openReading(art.id);
     row.addEventListener('dragstart', e => {
       e.dataTransfer.setData('articleId', art.id);
       row.classList.add('drag-dragging');
@@ -1734,6 +1795,70 @@ function renderArticleList() {
 }
 
 window.filterArticles = () => renderArticleList();
+
+// ── Batch mode ──
+window.toggleBatchMode = () => {
+  batchMode = !batchMode;
+  batchSelected.clear();
+  document.body.classList.toggle('batch-active', batchMode);
+  document.getElementById('batch-bar').classList.toggle('visible', batchMode);
+  document.getElementById('batch-toggle-btn').classList.toggle('active', batchMode);
+  renderArticleList();
+};
+
+window.toggleBatchSelect = (id, cb) => {
+  if (cb.checked) batchSelected.add(id);
+  else batchSelected.delete(id);
+  const row = document.querySelector(`.article-row[data-id="${id}"]`);
+  if (row) row.classList.toggle('batch-sel', cb.checked);
+  document.getElementById('batch-count').textContent = `已選 ${batchSelected.size} 篇`;
+};
+
+window.batchMarkDone = async () => {
+  if (!batchSelected.size) { showToast('請先選取文章'); return; }
+  const ids = [...batchSelected];
+  await Promise.all(ids.map(id => updateDoc(doc(db, 'articles', id), { readStatus: 'done' })));
+  showToast(`${ids.length} 篇已標為已讀`);
+  toggleBatchMode();
+};
+
+window.batchDelete = async () => {
+  if (!batchSelected.size) { showToast('請先選取文章'); return; }
+  if (!confirm(`確定刪除選取的 ${batchSelected.size} 篇文章？`)) return;
+  const ids = [...batchSelected];
+  await Promise.all(ids.map(id => deleteDoc(doc(db, 'articles', id))));
+  showToast(`已刪除 ${ids.length} 篇`);
+  toggleBatchMode();
+};
+
+window.batchAddTag = async () => {
+  if (!batchSelected.size) { showToast('請先選取文章'); return; }
+  const tag = prompt('輸入要加入的標籤：');
+  if (!tag?.trim()) return;
+  const t = tag.trim();
+  const ids = [...batchSelected];
+  await Promise.all(ids.map(id => {
+    const art = articles.find(a => a.id === id);
+    const tags = [...new Set([...(art?.tags||[]), t])];
+    return updateDoc(doc(db, 'articles', id), { tags });
+  }));
+  showToast(`已替 ${ids.length} 篇加上「${t}」`);
+  toggleBatchMode();
+};
+
+window.batchMoveFolder = async () => {
+  if (!batchSelected.size) { showToast('請先選取文章'); return; }
+  if (!folders.length) { showToast('尚無資料夾'); return; }
+  const opts = folders.map((f,i) => `${i+1}. ${f.name}`).join('\n');
+  const choice = prompt(`選擇資料夾（輸入數字）：\n${opts}`);
+  const idx = parseInt(choice) - 1;
+  if (isNaN(idx) || idx < 0 || idx >= folders.length) return;
+  const folderId = folders[idx].id;
+  const ids = [...batchSelected];
+  await Promise.all(ids.map(id => updateDoc(doc(db, 'articles', id), { folderId })));
+  showToast(`已移動 ${ids.length} 篇到「${folders[idx].name}」`);
+  toggleBatchMode();
+};
 
 window.updateSearchClear = () => {
   const val = document.getElementById('search-input')?.value || '';
@@ -2776,14 +2901,14 @@ window.openSettings = (tab) => {
   currentSettingsTab = tab || 'tts';
   renderSettingsBody();
   document.getElementById('settings-modal').classList.add('open');
-  document.querySelectorAll('.settings-tab').forEach((t,i) => {
-    t.classList.toggle('active', ['tts','appearance','account','export'][i] === currentSettingsTab);
+  ['tts','appearance','account','export'].forEach(t => {
+    document.getElementById('snav-'+t)?.classList.toggle('active', t === currentSettingsTab);
   });
 };
 window.switchSettingsTab = (tab) => {
   currentSettingsTab = tab;
-  document.querySelectorAll('.settings-tab').forEach((t,i) => {
-    t.classList.toggle('active', ['tts','appearance','account','export'][i] === tab);
+  ['tts','appearance','account','export'].forEach(t => {
+    document.getElementById('snav-'+t)?.classList.toggle('active', t === tab);
   });
   renderSettingsBody();
 };
