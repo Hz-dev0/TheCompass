@@ -3128,9 +3128,18 @@ window.loginWithPasscode = async () => {
     console.log('[LP] data=', data);
     if (Date.now() > data.expires) { showToast('驗證碼已過期'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     if (data.used) { showToast('驗證碼已使用過'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
+    console.log('[LP] passed expiry/used checks');
     // Step 2: sign in anonymously to get a real Firebase Auth token
     console.log('[LP] step2: importing firebase-auth...');
-    const { signInAnonymously: _sia } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+    let authModule;
+    try {
+      authModule = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+      console.log('[LP] step2: import resolved', authModule);
+    } catch (impErr) {
+      console.error('[LP] step2: import THREW', impErr);
+      throw impErr;
+    }
+    const _sia = authModule.signInAnonymously;
     console.log('[LP] step2: import done, calling signInAnonymously...');
     const anonCred = await Promise.race([
       _sia(auth),
