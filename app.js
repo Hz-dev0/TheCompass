@@ -1,6 +1,6 @@
 console.log('[boot] module script started');
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, signInAnonymously, setPersistence, browserLocalPersistence, indexedDBLocalPersistence, browserSessionPersistence, inMemoryPersistence } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 console.log('[boot] firebase modules imported');
 
@@ -17,6 +17,23 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
+
+// Incognito mode often blocks/limits IndexedDB, which can cause
+// signInAnonymously() to "succeed" but the session not persist,
+// leaving auth.currentUser as null afterwards. Try IndexedDB ->
+// localStorage -> sessionStorage -> in-memory as a fallback chain.
+(async function setupAuthPersistence() {
+  const chain = [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, inMemoryPersistence];
+  for (const p of chain) {
+    try {
+      await setPersistence(auth, p);
+      console.log('[auth] persistence set:', p.type);
+      break;
+    } catch (e) {
+      console.warn('[auth] persistence failed:', p.type, e);
+    }
+  }
+})();
 
 // DEBUG: expose internals to window for console testing
 window.__debug = { auth, db, getDoc, doc, setDoc, signInAnonymously: null, getAuth, getFirestore, fbApp };
@@ -1795,6 +1812,9 @@ window.loginWithPasscode = async () => {
       });
     });
     console.log('[LP] auth ready, currentUser=', auth.currentUser?.uid);
+    if (!auth.currentUser || auth.currentUser.uid !== anonUid) {
+      throw new Error('登入後驗證狀態遺失，請確認瀏覽器未封鎖儲存空間（無痕模式部分設定可能導致此問題）');
+    }
     // Step 3: write delegate mapping so Firestore rules permit cross-uid reads.
     // Best-effort: don't let a rules/permission issue here block the login flow.
     console.log('[LP] step3: writing delegate doc...');
