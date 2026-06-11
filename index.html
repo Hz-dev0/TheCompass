@@ -3147,11 +3147,23 @@ window.loginWithPasscode = async () => {
     ]);
     console.log('[LP] step2 done, anonUid=', anonCred.user.uid);
     const anonUid = anonCred.user.uid;
+    console.log('[LP] auth.currentUser right after signIn:', auth.currentUser?.uid);
+    // Ensure auth.currentUser is populated before issuing Firestore writes,
+    // otherwise the SDK may queue the write indefinitely waiting for a token.
+    let waited = 0;
+    while (!auth.currentUser && waited < 5000) {
+      await new Promise(r => setTimeout(r, 100));
+      waited += 100;
+    }
+    console.log('[LP] auth.currentUser after wait:', auth.currentUser?.uid, 'waited=', waited);
     // Step 3: write delegate mapping so Firestore rules permit cross-uid reads.
     // Best-effort: don't let a rules/permission issue here block the login flow.
     console.log('[LP] step3: writing delegate doc...');
     try {
-      await setDoc(doc(db, 'delegates', anonUid), { ownerUid: data.uid });
+      await Promise.race([
+        setDoc(doc(db, 'delegates', anonUid), { ownerUid: data.uid }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('delegate write timeout')), 8000))
+      ]);
       console.log('[passcode] delegate written:', anonUid, '->', data.uid);
     } catch (e2) {
       console.error('[passcode] delegate write failed', e2);
@@ -3159,7 +3171,10 @@ window.loginWithPasscode = async () => {
     // Step 3b: mark passcode as used (best-effort, single-use enforcement)
     console.log('[LP] step3b: marking passcode used...');
     try {
-      await setDoc(doc(db, 'passcodes', code), { used: true, anonUid }, { merge: true });
+      await Promise.race([
+        setDoc(doc(db, 'passcodes', code), { used: true, anonUid }, { merge: true }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('mark-used timeout')), 8000))
+      ]);
       console.log('[LP] step3b done');
     } catch (e3) {
       console.warn('passcode mark-used failed', e3);
