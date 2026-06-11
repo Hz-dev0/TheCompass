@@ -253,8 +253,8 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .article-row::after {
   content: '';
   box-sizing: border-box;
-  position: absolute; left: 6px; top: 50%;
-  width: 8px; height: 8px;
+  position: absolute; left: 2px; top: 50%;
+  width: 16px; height: 16px;
   border-radius: 50%;
   background: var(--accent);
   transform: translateY(-50%) scale(0);
@@ -274,8 +274,8 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 }
 .article-row .ripple-dot2 {
   content: ''; box-sizing: border-box;
-  position: absolute; left: 6px; top: 50%;
-  width: 8px; height: 8px;
+  position: absolute; left: 2px; top: 50%;
+  width: 16px; height: 16px;
   border-radius: 50%;
   background: var(--accent);
   transform: translateY(-50%) scale(0);
@@ -1424,6 +1424,8 @@ onAuthStateChanged(auth, user => {
       document.getElementById('auth-screen').style.display = 'none';
       document.getElementById('app').classList.add('visible');
       document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
+      // Ensure delegate mapping exists for this anon session (handles new anon uid on reload)
+      setDoc(doc(db, 'delegates', user.uid), { ownerUid: passcodeTargetUid }).catch(()=>{});
       subscribeData();
       passcodeTargetUid = null;
     } else if (!user.isAnonymous) {
@@ -3099,8 +3101,9 @@ window.loginWithPasscode = async () => {
     const { signInAnonymously: _sia } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
     const anonCred = await _sia(auth);
     const anonUid = anonCred.user.uid;
-    // Step 3: write anonUid→ownerUid mapping into passcode doc (passcodes allow create/update if auth != null)
+    // Step 3: write anonUid→ownerUid mapping for Firestore rules to permit cross-uid reads
     await setDoc(doc(db, 'passcodes', code), { anonUid }, { merge: true });
+    await setDoc(doc(db, 'delegates', anonUid), { ownerUid: data.uid });
     // Step 4: store locally
     localStorage.setItem('passcode_uid', data.uid);
     localStorage.setItem('passcode_code', code);
