@@ -3094,7 +3094,10 @@ window.loginWithPasscode = async () => {
   if (btn) { btn.disabled = true; btn.textContent = '驗證中…'; }
   try {
     // Step 1: read passcode (rules allow public read)
-    const snap = await getDoc(doc(db, 'passcodes', code));
+    const snap = await Promise.race([
+      getDoc(doc(db, 'passcodes', code)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('讀取驗證碼逾時，請檢查網路連線')), 10000))
+    ]);
     if (!snap.exists()) { showToast('驗證碼無效'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     const data = snap.data();
     if (Date.now() > data.expires) { showToast('驗證碼已過期'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
@@ -3134,7 +3137,8 @@ window.loginWithPasscode = async () => {
     passcodeTargetUid = null;
     subscribeData();
   } catch(e) {
-    showToast('登入失敗：' + e.message);
+    console.error('loginWithPasscode error:', e);
+    showToast('登入失敗：' + (e.code || e.message || e));
     if (btn) { btn.disabled = false; btn.textContent = '匿名登入'; }
   }
 };
