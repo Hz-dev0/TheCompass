@@ -75,7 +75,7 @@ onAuthStateChanged(auth, user => {
       document.getElementById('app').classList.add('visible');
       document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
       // Ensure delegate mapping exists for this anon session (handles new anon uid on reload)
-      setDoc(doc(db, 'delegates', user.uid), { ownerUid: passcodeTargetUid }).catch(()=>{});
+      setDoc(doc(db, 'delegates', user.uid), { ownerUid: passcodeTargetUid, usedPasscode: localStorage.getItem('passcode_code') }).catch(()=>{});
       subscribeData();
       passcodeTargetUid = null;
     } else if (!user.isAnonymous) {
@@ -1736,7 +1736,7 @@ window.generatePasscode = async () => {
   const expires = Date.now() + 2 * 60 * 1000;
   try {
     await setDoc(doc(db, 'passcodes', code), {
-      uid: currentUser.uid, expires, used: false, createdAt: serverTimestamp()
+      ownerUid: currentUser.uid, expires, used: false, createdAt: serverTimestamp()
     });
     document.getElementById('passcode-code').textContent = code;
     document.getElementById('passcode-modal').classList.add('open');
@@ -1800,10 +1800,10 @@ window.loginWithPasscode = async () => {
     console.log('[LP] step3: writing delegate doc...');
     try {
       await Promise.race([
-        setDoc(doc(db, 'delegates', anonUid), { ownerUid: data.uid }),
+        setDoc(doc(db, 'delegates', anonUid), { ownerUid: data.ownerUid, usedPasscode: code }),
         new Promise((_, rej) => setTimeout(() => rej(new Error('delegate write timeout')), 8000))
       ]);
-      console.log('[passcode] delegate written:', anonUid, '->', data.uid);
+      console.log('[passcode] delegate written:', anonUid, '->', data.ownerUid);
     } catch (e2) {
       console.error('[passcode] delegate write failed', e2);
     }
@@ -1820,14 +1820,14 @@ window.loginWithPasscode = async () => {
     }
     // Step 4: store locally
     console.log('[LP] step4: finalizing session...');
-    localStorage.setItem('passcode_uid', data.uid);
+    localStorage.setItem('passcode_uid', data.ownerUid);
     localStorage.setItem('passcode_code', code);
     localStorage.setItem('passcode_expires', data.expires);
     showToast('驗證成功，載入中…');
     // Manually trigger session setup: onAuthStateChanged may NOT fire again
     // if this browser was already signed in anonymously (signInAnonymously
     // resolves with the existing user without a state change in that case).
-    currentUser = { uid: data.uid, displayName: '匿名', photoURL: null, isAnonymous: true };
+    currentUser = { uid: data.ownerUid, displayName: '匿名', photoURL: null, isAnonymous: true };
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app').classList.add('visible');
     document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
