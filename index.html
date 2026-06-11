@@ -1356,10 +1356,17 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 <div id="highlight-mode-banner" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:800;background:var(--accent);color:#fff;padding:4px 16px;border-radius:0 0 8px 8px;font-size:12px;display:none;pointer-events:none">🪄 Highlight 模式 — 在文章中選取文字，確認後標記黃底</div>
 
 <!-- Firebase + App Script -->
+<script>
+window.addEventListener('error', e => console.error('[GLOBAL ERROR]', e.message, e.filename, e.lineno));
+window.addEventListener('unhandledrejection', e => console.error('[UNHANDLED REJECTION]', e.reason));
+console.log('[boot] inline script ran');
+</script>
 <script type="module">
+console.log('[boot] module script started');
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+console.log('[boot] firebase modules imported');
 
 const firebaseConfig = {
   apiKey: "AIzaSyDVJPG00SlAS9Vku4MuJYHq2reB2ENRClE",
@@ -3096,6 +3103,7 @@ window.copyPasscode = () => {
   navigator.clipboard.writeText(code).then(() => showToast('驗證碼已複製'));
 };
 
+console.log('[boot] defining loginWithPasscode');
 window.loginWithPasscode = async () => {
   const code = document.getElementById('passcode-input').value.trim();
   if (code.length !== 6) { showToast('請輸入6位驗證碼'); return; }
