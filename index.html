@@ -1359,7 +1359,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 <script>
 window.addEventListener('error', e => console.error('[GLOBAL ERROR]', e.message, e.filename, e.lineno));
 window.addEventListener('unhandledrejection', e => console.error('[UNHANDLED REJECTION]', e.reason));
-console.log('[boot] inline script ran');
+console.log('[boot] inline script ran - BUILD v2-authstate-fix');
 </script>
 <script type="module">
 console.log('[boot] module script started');
@@ -3131,19 +3131,28 @@ window.loginWithPasscode = async () => {
     console.log('[LP] passed expiry/used checks');
     // Step 2: sign in anonymously to get a real Firebase Auth token
     console.log('[LP] step2: calling signInAnonymously...');
-    const _sia = signInAnonymously;
     const anonCred = await Promise.race([
-      _sia(auth),
+      signInAnonymously(auth),
       new Promise((_, rej) => setTimeout(() => rej(new Error('登入逾時，請檢查網路或匿名登入是否已啟用')), 10000))
     ]);
-    console.log('[LP] step2 done, anonUid=', anonCred.user.uid);
     const anonUid = anonCred.user.uid;
-    console.log('[LP] auth.currentUser right after signIn:', auth.currentUser?.uid);
-    // Small delay to let Firestore's internal auth-token listener pick up
-    // the new auth state before issuing writes (avoids SDK race where
-    // setDoc issued in the same tick as signInAnonymously resolution hangs).
-    await new Promise(r => setTimeout(r, 300));
-    console.log('[LP] post-delay auth.currentUser:', auth.currentUser?.uid);
+    console.log('[LP] step2 done, anonUid=', anonUid);
+    // Wait for the auth state change + ID token to be ready before issuing
+    // Firestore writes. signInAnonymously can resolve before auth.currentUser
+    // is fully settled, causing Firestore writes to hang indefinitely.
+    await new Promise((resolve) => {
+      if (auth.currentUser && auth.currentUser.uid === anonUid) {
+        auth.currentUser.getIdToken().then(() => resolve());
+        return;
+      }
+      const unsub = onAuthStateChanged(auth, (u) => {
+        if (u && u.uid === anonUid) {
+          unsub();
+          u.getIdToken().then(() => resolve());
+        }
+      });
+    });
+    console.log('[LP] auth ready, currentUser=', auth.currentUser?.uid);
     // Step 3: write delegate mapping so Firestore rules permit cross-uid reads.
     // Best-effort: don't let a rules/permission issue here block the login flow.
     console.log('[LP] step3: writing delegate doc...');
