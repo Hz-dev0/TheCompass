@@ -229,6 +229,8 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 
 /* ── Article list ── */
 .article-list { flex: 1; overflow-y: auto; padding: 8px; }
+.vs-spacer-top, .vs-spacer-bottom { width: 100%; flex-shrink: 0; }
+.vs-rows { display: block; }
 .article-row {
   display: flex; align-items: center; flex-wrap: wrap; gap: 2px 8px; padding: 7px 10px;
   border-radius: var(--radius); cursor: pointer; position: relative;
@@ -236,9 +238,9 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   border: 1px solid transparent;
   min-width: 0; overflow: hidden;
 }
-@keyframes spin-diamond {
-  0%   { transform: translateY(-50%) rotate(45deg); }
-  100% { transform: translateY(-50%) rotate(405deg); }
+@keyframes ripple-dot {
+  0%   { transform: translateY(-50%) scale(0); opacity: 1; }
+  100% { transform: translateY(-50%) scale(1); opacity: 0; }
 }
 .article-row::before {
   content: ''; position: absolute; bottom: 0; left: 12px; right: 12px;
@@ -250,11 +252,13 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 }
 .article-row::after {
   content: '';
-  position: absolute; left: 10px; top: 50%;
+  box-sizing: border-box;
+  position: absolute; left: 6px; top: 50%;
   width: 8px; height: 8px;
+  border-radius: 50%;
   background: var(--accent);
-  transform: translateY(-50%) rotate(45deg);
-  opacity: 0; transition: opacity 0.15s;
+  transform: translateY(-50%) scale(0);
+  opacity: 0;
   pointer-events: none;
 }
 .article-row:hover {
@@ -266,8 +270,21 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   transform: scaleX(1);
 }
 .article-row:hover::after {
-  opacity: 1;
-  animation: spin-diamond 1.2s linear infinite;
+  animation: ripple-dot 1.2s linear infinite;
+}
+.article-row .ripple-dot2 {
+  content: ''; box-sizing: border-box;
+  position: absolute; left: 6px; top: 50%;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translateY(-50%) scale(0);
+  opacity: 0;
+  pointer-events: none;
+}
+.article-row:hover .ripple-dot2 {
+  animation: ripple-dot 1.2s linear infinite;
+  animation-delay: 0.6s;
 }
 .article-row-dot { transition: opacity 0.15s; }
 .article-row:hover .article-row-dot { opacity: 0; }
@@ -1714,82 +1731,147 @@ function getFilteredArticles() {
   return list;
 }
 
+// ── Virtual scroll state ──
+const VS_ROW_ESTIMATE = 40; // px, fallback estimate before measurement
+const VS_BUFFER = 6; // extra rows rendered above/below viewport
+let vsRowHeight = VS_ROW_ESTIMATE;
+let vsFiltered = [];
+let vsScrollHandlerAttached = false;
+
+function buildArticleRow(art) {
+  const row = document.createElement('div');
+  row.className = 'article-row';
+  row.draggable = true;
+  row.dataset.id = art.id;
+  const tagsHtml = (art.tags||[]).slice(0,3).map(t=>`<span class="article-tag">${escHtml(t)}</span>`).join('');
+  const dateStr = art.createdAt ? formatDate(art.createdAt.seconds*1000) : '';
+  // Search highlight in title
+  const searchQ = document.getElementById('search-input')?.value.trim() || '';
+  const rawTitle = art.title || '未命名';
+  let titleHtml;
+  if (searchQ) {
+    const safeQ = searchQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    titleHtml = escHtml(rawTitle).replace(new RegExp(safeQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m => `<mark>${escHtml(m)}</mark>`);
+    // Re-do: escape then highlight
+    const parts = rawTitle.split(new RegExp(`(${safeQ})`, 'gi'));
+    titleHtml = parts.map(p => p.toLowerCase() === searchQ.toLowerCase() ? `<mark>${escHtml(p)}</mark>` : escHtml(p)).join('');
+  } else {
+    titleHtml = escHtml(rawTitle);
+  }
+  // Dot: pinned=red circle > favorite=❤️ > done=dash > pending=grey circle
+  let dotHtml;
+  if (art.pinned) {
+    dotHtml = '<span class="article-row-dot" style="width:9px;height:9px;border-radius:50%;background:var(--danger);flex-shrink:0;display:inline-block;transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1),background 0.15s" title="置頂"></span>';
+  } else if (art.favorite) {
+    dotHtml = '<span class="article-row-dot" style="font-size:11px;flex-shrink:0;line-height:1;transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1)" title="收藏">❤️</span>';
+  } else if (art.readStatus === 'done') {
+    dotHtml = '<span class="article-row-dot" style="font-size:12px;flex-shrink:0;color:var(--text3);font-weight:600;line-height:1;transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1)" title="已閱">—</span>';
+  } else {
+    dotHtml = '<span class="article-row-dot" style="width:7px;height:7px;border-radius:50%;background:var(--border2);flex-shrink:0;display:inline-block;transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1),background 0.15s" title="待閱"></span>';
+  }
+  // Body snippet when searching
+  let snippetHtml = '';
+  if (searchQ && art.body) {
+    const bodyLower = art.body.toLowerCase();
+    const idx = bodyLower.indexOf(searchQ.toLowerCase());
+    if (idx !== -1) {
+      const start = Math.max(0, idx - 20);
+      const end = Math.min(art.body.length, idx + searchQ.length + 50);
+      const raw = (start > 0 ? '…' : '') + art.body.slice(start, end) + (end < art.body.length ? '…' : '');
+      const safeQ2 = searchQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const parts2 = raw.split(new RegExp(`(${safeQ2})`, 'gi'));
+      const snippetInner = parts2.map(p => p.toLowerCase() === searchQ.toLowerCase() ? `<mark>${escHtml(p)}</mark>` : escHtml(p)).join('');
+      snippetHtml = `<span class="article-snippet">${snippetInner}</span>`;
+    }
+  }
+  const authorHtml = art.author ? `<span class="article-author" title="${escHtml(art.author)}">${escHtml(art.author)}</span>` : '';
+  row.innerHTML = `<input type="checkbox" class="batch-check" ${batchSelected.has(art.id)?'checked':''} onclick="event.stopPropagation();toggleBatchSelect('${art.id}',this)"><span class="ripple-dot2"></span>${dotHtml}<span class="article-title">${titleHtml}</span>${authorHtml}<div class="article-tags">${tagsHtml}</div><span class="article-date">${dateStr}</span>${snippetHtml}`;
+  if (art.pinned) row.classList.add('pinned');
+  if (batchSelected.has(art.id)) row.classList.add('batch-sel');
+  row.onclick = batchMode ? () => {
+    const cb = row.querySelector('.batch-check');
+    cb.checked = !cb.checked;
+    toggleBatchSelect(art.id, cb);
+  } : () => openReading(art.id);
+  row.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('articleId', art.id);
+    row.classList.add('drag-dragging');
+  });
+  row.addEventListener('dragend', () => row.classList.remove('drag-dragging'));
+  // Hover highlight tooltip (desktop only)
+  if (art.highlight && !isMobile()) {
+    row.addEventListener('mouseenter', e => showHighlightTooltip(e, art.highlight));
+    row.addEventListener('mousemove', e => moveHighlightTooltip(e));
+    row.addEventListener('mouseleave', hideHighlightTooltip);
+  }
+  return row;
+}
+
 function renderArticleList() {
   const list = document.getElementById('article-list');
-  const filtered = getFilteredArticles();
-  if (filtered.length === 0) {
+  vsFiltered = getFilteredArticles();
+  if (vsFiltered.length === 0) {
     list.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>還沒有文章</p><button class="empty-cta" onclick="openNewModal()">+ 新增第一篇</button></div>`;
     return;
   }
-  list.innerHTML = '';
-  filtered.forEach(art => {
-    const row = document.createElement('div');
-    row.className = 'article-row';
-    row.draggable = true;
-    row.dataset.id = art.id;
-    const tagsHtml = (art.tags||[]).slice(0,3).map(t=>`<span class="article-tag">${escHtml(t)}</span>`).join('');
-    const dateStr = art.createdAt ? formatDate(art.createdAt.seconds*1000) : '';
-    // Search highlight in title
-    const searchQ = document.getElementById('search-input')?.value.trim() || '';
-    const rawTitle = art.title || '未命名';
-    let titleHtml;
-    if (searchQ) {
-      const safeQ = searchQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      titleHtml = escHtml(rawTitle).replace(new RegExp(safeQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m => `<mark>${escHtml(m)}</mark>`);
-      // Re-do: escape then highlight
-      const parts = rawTitle.split(new RegExp(`(${safeQ})`, 'gi'));
-      titleHtml = parts.map(p => p.toLowerCase() === searchQ.toLowerCase() ? `<mark>${escHtml(p)}</mark>` : escHtml(p)).join('');
-    } else {
-      titleHtml = escHtml(rawTitle);
-    }
-    // Dot: pinned=red circle > favorite=❤️ > done=dash > pending=grey circle
-    let dotHtml;
-    if (art.pinned) {
-      dotHtml = '<span class="article-row-dot" style="width:9px;height:9px;border-radius:50%;background:var(--danger);flex-shrink:0;display:inline-block;transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1),background 0.15s" title="置頂"></span>';
-    } else if (art.favorite) {
-      dotHtml = '<span class="article-row-dot" style="font-size:11px;flex-shrink:0;line-height:1;transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1)" title="收藏">❤️</span>';
-    } else if (art.readStatus === 'done') {
-      dotHtml = '<span class="article-row-dot" style="font-size:12px;flex-shrink:0;color:var(--text3);font-weight:600;line-height:1;transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1)" title="已閱">—</span>';
-    } else {
-      dotHtml = '<span class="article-row-dot" style="width:7px;height:7px;border-radius:50%;background:var(--border2);flex-shrink:0;display:inline-block;transition:transform 0.2s cubic-bezier(0.34,1.56,0.64,1),background 0.15s" title="待閱"></span>';
-    }
-    // Body snippet when searching
-    let snippetHtml = '';
-    if (searchQ && art.body) {
-      const bodyLower = art.body.toLowerCase();
-      const idx = bodyLower.indexOf(searchQ.toLowerCase());
-      if (idx !== -1) {
-        const start = Math.max(0, idx - 20);
-        const end = Math.min(art.body.length, idx + searchQ.length + 50);
-        const raw = (start > 0 ? '…' : '') + art.body.slice(start, end) + (end < art.body.length ? '…' : '');
-        const safeQ2 = searchQ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const parts2 = raw.split(new RegExp(`(${safeQ2})`, 'gi'));
-        const snippetInner = parts2.map(p => p.toLowerCase() === searchQ.toLowerCase() ? `<mark>${escHtml(p)}</mark>` : escHtml(p)).join('');
-        snippetHtml = `<span class="article-snippet">${snippetInner}</span>`;
+
+  // Set up virtual scroll container structure once
+  if (!list.querySelector('.vs-spacer-top')) {
+    list.innerHTML = `<div class="vs-spacer-top"></div><div class="vs-rows"></div><div class="vs-spacer-bottom"></div>`;
+  }
+
+  if (!vsScrollHandlerAttached) {
+    list.addEventListener('scroll', () => requestAnimationFrame(vsRender));
+    window.addEventListener('resize', () => requestAnimationFrame(vsRender));
+    vsScrollHandlerAttached = true;
+  }
+
+  vsRender();
+}
+
+function vsRender() {
+  const list = document.getElementById('article-list');
+  const topSpacer = list.querySelector('.vs-spacer-top');
+  const bottomSpacer = list.querySelector('.vs-spacer-bottom');
+  const rowsEl = list.querySelector('.vs-rows');
+  if (!topSpacer || !bottomSpacer || !rowsEl) return;
+
+  const total = vsFiltered.length;
+  const scrollTop = list.scrollTop;
+  const viewportH = list.clientHeight || 600;
+
+  let startIdx = Math.max(0, Math.floor(scrollTop / vsRowHeight) - VS_BUFFER);
+  let visibleCount = Math.ceil(viewportH / vsRowHeight) + VS_BUFFER * 2;
+  let endIdx = Math.min(total, startIdx + visibleCount);
+
+  topSpacer.style.height = (startIdx * vsRowHeight) + 'px';
+  bottomSpacer.style.height = ((total - endIdx) * vsRowHeight) + 'px';
+
+  rowsEl.innerHTML = '';
+  for (let i = startIdx; i < endIdx; i++) {
+    rowsEl.appendChild(buildArticleRow(vsFiltered[i]));
+  }
+
+  // Measure actual row height from a rendered row and refine if needed
+  const sample = rowsEl.querySelector('.article-row');
+  if (sample) {
+    const measured = sample.getBoundingClientRect().height;
+    if (measured > 0 && Math.abs(measured - vsRowHeight) > 1) {
+      vsRowHeight = measured;
+      // Re-run with corrected height for accurate spacers
+      const newStart = Math.max(0, Math.floor(scrollTop / vsRowHeight) - VS_BUFFER);
+      const newVisible = Math.ceil(viewportH / vsRowHeight) + VS_BUFFER * 2;
+      const newEnd = Math.min(total, newStart + newVisible);
+      if (newStart !== startIdx || newEnd !== endIdx) {
+        topSpacer.style.height = (newStart * vsRowHeight) + 'px';
+        bottomSpacer.style.height = ((total - newEnd) * vsRowHeight) + 'px';
+        rowsEl.innerHTML = '';
+        for (let i = newStart; i < newEnd; i++) {
+          rowsEl.appendChild(buildArticleRow(vsFiltered[i]));
+        }
       }
     }
-    const authorHtml = art.author ? `<span class="article-author" title="${escHtml(art.author)}">${escHtml(art.author)}</span>` : '';
-    row.innerHTML = `<input type="checkbox" class="batch-check" ${batchSelected.has(art.id)?'checked':''} onclick="event.stopPropagation();toggleBatchSelect('${art.id}',this)">${dotHtml}<span class="article-title">${titleHtml}</span>${authorHtml}<div class="article-tags">${tagsHtml}</div><span class="article-date">${dateStr}</span>${snippetHtml}`;
-    if (art.pinned) row.classList.add('pinned');
-    if (batchSelected.has(art.id)) row.classList.add('batch-sel');
-    row.onclick = batchMode ? () => {
-      const cb = row.querySelector('.batch-check');
-      cb.checked = !cb.checked;
-      toggleBatchSelect(art.id, cb);
-    } : () => openReading(art.id);
-    row.addEventListener('dragstart', e => {
-      e.dataTransfer.setData('articleId', art.id);
-      row.classList.add('drag-dragging');
-    });
-    row.addEventListener('dragend', () => row.classList.remove('drag-dragging'));
-    // Hover highlight tooltip (desktop only)
-    if (art.highlight && !isMobile()) {
-      row.addEventListener('mouseenter', e => showHighlightTooltip(e, art.highlight));
-      row.addEventListener('mousemove', e => moveHighlightTooltip(e));
-      row.addEventListener('mouseleave', hideHighlightTooltip);
-    }
-    list.appendChild(row);
-  });
+  }
 }
 
 window.filterArticles = () => renderArticleList();
