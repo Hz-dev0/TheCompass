@@ -22,16 +22,12 @@ const db = getFirestore(fbApp);
 // signInAnonymously() to "succeed" but the session not persist,
 // leaving auth.currentUser as null afterwards. Try IndexedDB ->
 // localStorage -> sessionStorage -> in-memory as a fallback chain.
-(async function setupAuthPersistence() {
-  const chain = [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, inMemoryPersistence];
-  for (const p of chain) {
-    try {
-      await setPersistence(auth, p);
-      console.log('[auth] persistence set:', p.type);
-      break;
-    } catch (e) {
-      console.warn('[auth] persistence failed:', p.type, e);
-    }
+window.__authPersistenceReady = (async function setupAuthPersistence() {
+  try {
+    await setPersistence(auth, inMemoryPersistence);
+    console.log('[auth] persistence set: IN_MEMORY (forced)');
+  } catch (e) {
+    console.warn('[auth] inMemoryPersistence failed', e);
   }
 })();
 
@@ -1778,6 +1774,7 @@ window.loginWithPasscode = async () => {
   const btn = document.querySelector('#auth-screen .btn-primary');
   if (btn) { btn.disabled = true; btn.textContent = '驗證中…'; }
   try {
+    await window.__authPersistenceReady;
     // Step 1: read passcode (rules allow public read)
     console.log('[LP] step1: getDoc passcode...');
     const snap = await getDoc(doc(db, 'passcodes', code));
