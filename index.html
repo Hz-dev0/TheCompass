@@ -1436,7 +1436,8 @@ onAuthStateChanged(auth, user => {
       subscribeData();
     }
     // anonymous user without passcodeTargetUid = stale session, sign out
-    else {
+    // (but skip if we already have an active passcode-based session)
+    else if (!currentUser) {
       import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js').then(({signOut: so}) => so(auth));
     }
   } else {
@@ -3108,9 +3109,16 @@ window.loginWithPasscode = async () => {
     localStorage.setItem('passcode_uid', data.uid);
     localStorage.setItem('passcode_code', code);
     localStorage.setItem('passcode_expires', data.expires);
-    passcodeTargetUid = data.uid;
     showToast('驗證成功，載入中…');
-    // onAuthStateChanged will fire and call subscribeData
+    // Manually trigger session setup: onAuthStateChanged may NOT fire again
+    // if this browser was already signed in anonymously (signInAnonymously
+    // resolves with the existing user without a state change in that case).
+    currentUser = { uid: data.uid, displayName: '匿名', photoURL: null, isAnonymous: true };
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app').classList.add('visible');
+    document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
+    passcodeTargetUid = null;
+    subscribeData();
   } catch(e) {
     showToast('登入失敗：' + e.message);
     if (btn) { btn.disabled = false; btn.textContent = '匿名登入'; }
