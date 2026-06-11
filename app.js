@@ -1723,7 +1723,7 @@ function renderSettingsBody() {
       </div>` : ''}
       <div class="settings-row" style="margin-top:4px">
         <label></label>
-        <button class="btn btn-danger" onclick="if(confirm('確定登出？'))signOut(auth)">登出</button>
+        <button class="btn btn-danger" onclick="doSignOut()">登出</button>
       </div>
     `;
   }
@@ -1731,14 +1731,20 @@ function renderSettingsBody() {
 
 // ── Passcode ──
 window.generatePasscode = async () => {
+  if (!currentUser || !currentUser.uid) { showToast('尚未登入'); return; }
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   const expires = Date.now() + 2 * 60 * 1000;
-  await setDoc(doc(db, 'passcodes', code), {
-    uid: currentUser.uid, expires, used: false
-  });
-  document.getElementById('passcode-code').textContent = code;
-  document.getElementById('passcode-modal').classList.add('open');
-  document.getElementById('settings-modal').classList.remove('open');
+  try {
+    await setDoc(doc(db, 'passcodes', code), {
+      uid: currentUser.uid, expires, used: false, createdAt: serverTimestamp()
+    });
+    document.getElementById('passcode-code').textContent = code;
+    document.getElementById('passcode-modal').classList.add('open');
+    document.getElementById('settings-modal').classList.remove('open');
+  } catch (e) {
+    console.error('[generatePasscode] failed:', e);
+    showToast('產生驗證碼失敗：' + e.message);
+  }
 };
 
 window.copyPasscode = () => {
