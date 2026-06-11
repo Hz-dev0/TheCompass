@@ -3088,26 +3088,31 @@ window.copyPasscode = () => {
 };
 
 window.loginWithPasscode = async () => {
+  console.log('[passcode] login clicked');
   const code = document.getElementById('passcode-input').value.trim();
   if (code.length !== 6) { showToast('請輸入6位驗證碼'); return; }
   const btn = document.querySelector('#auth-screen .btn-primary');
   if (btn) { btn.disabled = true; btn.textContent = '驗證中…'; }
   try {
     // Step 1: read passcode (rules allow public read)
+    console.log('[passcode] reading passcode doc', code);
     const snap = await Promise.race([
       getDoc(doc(db, 'passcodes', code)),
       new Promise((_, rej) => setTimeout(() => rej(new Error('讀取驗證碼逾時，請檢查網路連線')), 10000))
     ]);
+    console.log('[passcode] passcode doc exists?', snap.exists());
     if (!snap.exists()) { showToast('驗證碼無效'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     const data = snap.data();
     if (Date.now() > data.expires) { showToast('驗證碼已過期'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     if (data.used) { showToast('驗證碼已使用過'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     // Step 2: sign in anonymously to get a real Firebase Auth token
+    console.log('[passcode] signing in anonymously');
     const { signInAnonymously: _sia } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
     const anonCred = await Promise.race([
       _sia(auth),
       new Promise((_, rej) => setTimeout(() => rej(new Error('登入逾時，請檢查網路或匿名登入是否已啟用')), 10000))
     ]);
+    console.log('[passcode] anon signed in', anonCred.user.uid);
     const anonUid = anonCred.user.uid;
     // Step 3: write delegate mapping so Firestore rules permit cross-uid reads.
     // Best-effort: don't let a rules/permission issue here block the login flow.
@@ -3137,7 +3142,7 @@ window.loginWithPasscode = async () => {
     passcodeTargetUid = null;
     subscribeData();
   } catch(e) {
-    console.error('loginWithPasscode error:', e);
+    console.error('[passcode] login error:', e);
     showToast('登入失敗：' + (e.code || e.message || e));
     if (btn) { btn.disabled = false; btn.textContent = '匿名登入'; }
   }
