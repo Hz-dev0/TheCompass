@@ -1379,8 +1379,6 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
-// 無痕視窗用 sessionStorage，一般視窗用 localStorage
-setPersistence(auth, browserSessionPersistence).catch(e => console.warn('setPersistence failed:', e));
 
 // DEBUG: expose internals to window for console testing
 window.__debug = { auth, db, getDoc, doc, setDoc, signInAnonymously: null, getAuth, getFirestore, fbApp };
@@ -3225,8 +3223,8 @@ window.loginWithPasscode = async () => {
     if (data.used) { showToast('驗證碼已使用過'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     console.log('[LP] passcode ok, ownerUid=', ownerUid);
 
-    // Step 2: 匿名登入 — 用 inMemoryPersistence 避免 IndexedDB 競爭問題
-    await setPersistence(auth, inMemoryPersistence);
+    // Step 2: 匿名登入 — 用 sessionStorage 確保 auth 在頁面生命週期內持久
+    await setPersistence(auth, browserSessionPersistence);
     const anonCred = await Promise.race([
       signInAnonymously(auth),
       new Promise((_, rej) => setTimeout(() => rej(new Error('登入逾時')), 15000))
