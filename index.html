@@ -1037,7 +1037,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
     <div class="auth-sub">輸入驗證碼進入</div>
 
     <div class="passcode-input-wrap">
-      <input id="passcode-input" type="text" inputmode="numeric" placeholder="6 位數驗證碼" maxlength="6"
+      <input id="passcode-input" type="text" inputmode="numeric" placeholder="驗證碼" maxlength="6"
         oninput="this.value=this.value.replace(/\D/g,'')"
         onkeydown="if(event.key==='Enter')loginWithPasscode()" />
       <button class="passcode-submit-btn" onclick="loginWithPasscode()" title="登入">
