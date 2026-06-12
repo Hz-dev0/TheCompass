@@ -3282,8 +3282,16 @@ window.loginWithPasscode = async () => {
     document.getElementById('app').classList.add('visible');
     document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
     passcodeTargetUid = null;
-    // 等待 Firestore 確認 delegate doc 已生效再讀取資料
-    await new Promise(r => setTimeout(r, 1500));
+    // 確認 delegate doc 可讀（代表已寫入並生效）再讀取資料
+    let delegateReady = false;
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      try {
+        const delSnap = await getDoc(doc(db, 'delegates', anonUid));
+        if (delSnap.exists()) { delegateReady = true; break; }
+      } catch(e) { /* 還沒就緒，繼續等 */ }
+    }
+    console.log('[LP] delegate ready=', delegateReady);
     subscribeData();
     console.log('[LP] ALL DONE');
   } catch(e) {
