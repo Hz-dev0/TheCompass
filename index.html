@@ -3247,16 +3247,18 @@ window.loginWithPasscode = async () => {
     const anonUid = anonCred.user.uid;
     console.log('[LP] anonUid=', anonUid);
 
-    // 等 auth token 完全就緒
+    // 等 auth token 完全就緒，並強制刷新確保 Firestore SDK 同步
     await new Promise((resolve) => {
       if (auth.currentUser && auth.currentUser.uid === anonUid) {
-        auth.currentUser.getIdToken().then(() => resolve());
+        auth.currentUser.getIdToken(true).then(() => resolve());
         return;
       }
       const unsub = onAuthStateChanged(auth, (u) => {
-        if (u && u.uid === anonUid) { unsub(); u.getIdToken().then(() => resolve()); }
+        if (u && u.uid === anonUid) { unsub(); u.getIdToken(true).then(() => resolve()); }
       });
     });
+    // 額外等待 Firestore SDK 內部同步新的 auth 狀態
+    await new Promise(r => setTimeout(r, 500));
 
     // Step 3: 寫入 delegate doc（write-once，簡化規則不做 passcode get() 驗證）
     try {
