@@ -1362,7 +1362,7 @@ console.log('[boot] inline script ran - BUILD v2-authstate-fix');
 <script type="module">
 console.log('[boot] module script started');
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, signInAnonymously, browserSessionPersistence, setPersistence } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot, query, where, serverTimestamp, waitForPendingWrites } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 console.log('[boot] firebase modules imported');
 
@@ -1379,6 +1379,8 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
+// 確保無痕視窗也能維持 auth 狀態（用 session 而非 local）
+setPersistence(auth, browserSessionPersistence).catch(e => console.warn('setPersistence failed:', e));
 
 // DEBUG: expose internals to window for console testing
 window.__debug = { auth, db, getDoc, doc, setDoc, signInAnonymously: null, getAuth, getFirestore, fbApp };
@@ -3240,6 +3242,8 @@ window.loginWithPasscode = async () => {
     console.log('[LP] passcode ok, ownerUid=', ownerUid);
 
     // Step 2: 匿名登入取得 Firebase Auth token
+    // 先確保 persistence 設定完成再登入
+    await setPersistence(auth, browserSessionPersistence).catch(() => {});
     const anonCred = await Promise.race([
       signInAnonymously(auth),
       new Promise((_, rej) => setTimeout(() => rej(new Error('登入逾時，請檢查網路或匿名登入是否已啟用')), 10000))
