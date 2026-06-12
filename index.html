@@ -3208,53 +3208,49 @@ window.loginWithPasscode = async () => {
   const btn = document.querySelector('#auth-screen .btn-primary');
   if (btn) { btn.disabled = true; btn.textContent = '驗證中…'; }
   try {
-    // Step 1: 讀取 passcode doc（規則允許公開讀）
+    // Step 1: 讀取 passcode doc
     const snap = await getDoc(doc(db, 'passcodes', code));
     if (!snap.exists()) { showToast('驗證碼無效'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     const data = snap.data();
-    const ownerUid = data.ownerUid || data.uid; // 相容新舊格式
+    const ownerUid = data.ownerUid || data.uid;
     if (!ownerUid) { showToast('驗證碼格式錯誤'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     if (Date.now() > Number(data.expires)) { showToast('驗證碼已過期'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     if (data.used) { showToast('驗證碼已使用過'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     console.log('[LP] passcode ok, ownerUid=', ownerUid);
 
-    // Step 2: 匿名登入取得 Firebase Auth token
-    // 先確保 persistence 設定完成再登入
-    await setPersistence(auth, browserSessionPersistence).catch(() => {});
-    const anonCred = await Promise.race([
-      signInAnonymously(auth),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('登入逾時，請檢查網路或匿名登入是否已啟用')), 10000))
-    ]);
-    const anonUid = anonCred.user.uid;
-    console.log('[LP] anonUid=', anonUid);
-
-    // 等 auth.currentUser 確實更新為 anonUid
-    await new Promise((resolve) => {
-      // 用 onAuthStateChanged 等待，它在 auth.currentUser 更新後才觸發
+    // Step 2: 匿名登入 — 用 onAuthStateChanged 確保 auth 完全就緒才繼續
+    const anonUser = await new Promise(async (resolve, reject) => {
+      // 先註冊監聽，再觸發登入，避免時機問題
       const unsub = onAuthStateChanged(auth, (u) => {
-        if (u && u.uid === anonUid) {
+        if (u && u.isAnonymous) {
           unsub();
-          resolve();
+          resolve(u);
         }
       });
+      try {
+        await signInAnonymously(auth);
+      } catch(e) {
+        unsub();
+        reject(e);
+      }
     });
-    // 強制取得新 token，確保 Firestore SDK 拿到最新憑證
-    await auth.currentUser.getIdToken(true);
-    console.log('[LP] auth confirmed, currentUser=', auth.currentUser?.uid);
+    const anonUid = anonUser.uid;
+    console.log('[LP] anonUid=', anonUid, 'auth.currentUser=', auth.currentUser?.uid);
 
-    // Step 3: 寫入 delegate doc（write-once，簡化規則不做 passcode get() 驗證）
+    // Step 3: 強制刷新 token 確保 Firestore SDK 同步
+    await anonUser.getIdToken(true);
+    console.log('[LP] token refreshed, auth.currentUser=', auth.currentUser?.uid);
+
+    // Step 4: 寫入 delegate doc
     try {
       await Promise.race([
-        setDoc(doc(db, 'delegates', anonUid), {
-          ownerUid: ownerUid,
-          usedPasscode: code
-        }),
+        setDoc(doc(db, 'delegates', anonUid), { ownerUid, usedPasscode: code }),
         new Promise((_, rej) => setTimeout(() => rej(new Error('delegate write timeout')), 8000))
       ]);
       console.log('[LP] delegate written:', anonUid, '->', ownerUid);
     } catch (e2) {
+      console.error('[LP] delegate write error:', e2?.code, e2?.message);
       if (e2?.code === 'permission-denied') {
-        // delegate 已存在（write-once 規則），確認是否同一個 owner
         const existingDel = await getDoc(doc(db, 'delegates', anonUid)).catch(() => null);
         if (existingDel?.exists() && existingDel.data().ownerUid !== ownerUid) {
           showToast('此匿名帳號已綁定其他用戶，請重試');
@@ -3267,7 +3263,7 @@ window.loginWithPasscode = async () => {
       }
     }
 
-    // Step 4: 標記 passcode 為已使用（規則允許：只能把 used 從 false 改成 true）
+    // Step 5: 標記 passcode 已使用
     try {
       await setDoc(doc(db, 'passcodes', code), { used: true }, { merge: true });
       console.log('[LP] passcode marked used');
@@ -3275,7 +3271,7 @@ window.loginWithPasscode = async () => {
       console.warn('[LP] mark used failed (non-critical):', e3.message);
     }
 
-    // Step 5: 儲存 session 並進入 app
+    // Step 6: 進入 app
     localStorage.setItem('passcode_uid', ownerUid);
     localStorage.setItem('passcode_code', code);
     localStorage.setItem('passcode_expires', data.expires);
@@ -3293,6 +3289,7 @@ window.loginWithPasscode = async () => {
     if (btn) { btn.disabled = false; btn.textContent = '匿名登入'; }
   }
 };
+
 
 function loadAnonymousData(uid, anonUid) {
   // anonUid = Firebase Auth uid of the anonymous session (may differ from ownerUid)
