@@ -3251,21 +3251,19 @@ window.loginWithPasscode = async () => {
     const anonUid = anonCred.user.uid;
     console.log('[LP] anonUid=', anonUid);
 
-    // 等 auth token 完全就緒
+    // 等 auth.currentUser 確實更新為 anonUid
     await new Promise((resolve) => {
-      if (auth.currentUser && auth.currentUser.uid === anonUid) {
-        auth.currentUser.getIdToken(true).then(() => resolve());
-        return;
-      }
+      // 用 onAuthStateChanged 等待，它在 auth.currentUser 更新後才觸發
       const unsub = onAuthStateChanged(auth, (u) => {
-        if (u && u.uid === anonUid) { unsub(); u.getIdToken(true).then(() => resolve()); }
+        if (u && u.uid === anonUid) {
+          unsub();
+          resolve();
+        }
       });
     });
-    // 用一個輕量的 Firestore 讀取來確認 SDK 已套用新的 auth 狀態
-    // 讀自己的 delegate doc（不存在也沒關係，permission-denied 也代表 auth 已生效）
-    await getDoc(doc(db, 'delegates', anonUid)).catch(() => {});
-    // 再給 100ms 緩衝
-    await new Promise(r => setTimeout(r, 100));
+    // 強制取得新 token，確保 Firestore SDK 拿到最新憑證
+    await auth.currentUser.getIdToken(true);
+    console.log('[LP] auth confirmed, currentUser=', auth.currentUser?.uid);
 
     // Step 3: 寫入 delegate doc（write-once，簡化規則不做 passcode get() 驗證）
     try {
