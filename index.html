@@ -1453,8 +1453,11 @@ onAuthStateChanged(auth, user => {
       renderUserAvatar();
       subscribeData();
     } else if (!currentUser) {
-      // Stale anonymous session with no passcode context — sign out
-      import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js').then(({signOut: so}) => so(auth));
+      // Stale anonymous session — but only sign out if loginWithPasscode is NOT in progress
+      // (loginWithPasscode sets currentUser in Step 6, so during Steps 2-5 currentUser is still null)
+      if (!window._passcodeLoginInProgress) {
+        import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js').then(({signOut: so}) => so(auth));
+      }
     }
   } else {
     currentUser = null;
@@ -3212,6 +3215,7 @@ window.loginWithPasscode = async () => {
   if (code.length !== 6) { showToast('請輸入6位驗證碼'); return; }
   const btn = document.querySelector('#auth-screen .btn-primary');
   if (btn) { btn.disabled = true; btn.textContent = '驗證中…'; }
+  window._passcodeLoginInProgress = true;
   try {
     // Step 1: 讀取 passcode doc
     const snap = await getDoc(doc(db, 'passcodes', code));
@@ -3286,6 +3290,7 @@ window.loginWithPasscode = async () => {
     document.getElementById('app').classList.add('visible');
     document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
     passcodeTargetUid = null;
+    window._passcodeLoginInProgress = false;
     // 確認 delegate doc 可讀（代表已寫入並生效）再讀取資料
     let delegateReady = false;
     for (let i = 0; i < 10; i++) {
@@ -3302,6 +3307,8 @@ window.loginWithPasscode = async () => {
     console.error('[LP] CAUGHT ERROR:', e);
     showToast('登入失敗：' + e.message);
     if (btn) { btn.disabled = false; btn.textContent = '匿名登入'; }
+  } finally {
+    window._passcodeLoginInProgress = false;
   }
 };
 
