@@ -1536,7 +1536,7 @@ function subscribeData() {
     // Anonymous users: Firebase rules block list queries for delegates because
     // dynamic get() is not evaluated at query time. Use getDocs (one-time fetch)
     // which goes through the per-document read rule (delegate check works there).
-    window._fetchAnonData = async function fetchAnonData() {
+    window._fetchAnonData = async function fetchAnonData(retryCount = 0) {
       try {
         const [artSnap, folSnap] = await Promise.all([
           getDocs(query(collection(db, 'articles'), where('uid','==',ownerUid))),
@@ -1556,7 +1556,14 @@ function subscribeData() {
         console.log('[subscribeData/anon] fetched articles=', articles.length, 'folders=', folders.length);
       } catch(err) {
         console.error('[subscribeData/anon] fetch error:', err);
-        showToast('讀取失敗：' + (err.code || err.message));
+        if (err.code === 'permission-denied' && retryCount < 6) {
+          // delegate doc 可能還沒在 Firestore 生效，等待後重試
+          const delay = (retryCount + 1) * 800;
+          console.log('[subscribeData/anon] retrying in', delay, 'ms... attempt', retryCount + 1);
+          setTimeout(() => window._fetchAnonData(retryCount + 1), delay);
+        } else {
+          showToast('讀取失敗：' + (err.code || err.message));
+        }
       }
     }
     window._fetchAnonData();
