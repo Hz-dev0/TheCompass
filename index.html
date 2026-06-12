@@ -3249,26 +3249,25 @@ window.loginWithPasscode = async () => {
     await auth.currentUser.getIdToken(true);
     console.log('[LP] token refreshed');
 
-    // Step 4: 寫入 delegate doc
-    try {
-      await Promise.race([
-        setDoc(doc(db, 'delegates', anonUid), { ownerUid, usedPasscode: code }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('delegate write timeout')), 8000))
-      ]);
-      console.log('[LP] delegate written:', anonUid, '->', ownerUid);
-    } catch (e2) {
-      console.error('[LP] delegate write error:', e2?.code, e2?.message);
-      if (e2?.code === 'permission-denied') {
-        const existingDel = await getDoc(doc(db, 'delegates', anonUid)).catch(() => null);
-        if (existingDel?.exists() && existingDel.data().ownerUid !== ownerUid) {
-          showToast('此匿名帳號已綁定其他用戶，請重試');
-          if (btn) { btn.disabled=false; btn.textContent='匿名登入'; }
-          return;
+    // Step 4: 寫入 delegate doc，失敗就重試（auth token 需要時間在 Firestore 生效）
+    let delegateWritten = false;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        await setDoc(doc(db, 'delegates', anonUid), { ownerUid, usedPasscode: code });
+        console.log('[LP] delegate written on attempt', attempt);
+        delegateWritten = true;
+        break;
+      } catch (e2) {
+        console.warn('[LP] delegate write attempt', attempt, 'failed:', e2?.code);
+        if (attempt < 5) {
+          await new Promise(r => setTimeout(r, attempt * 500));
         }
-        console.log('[LP] delegate already exists for same owner, continuing');
-      } else {
-        throw e2;
       }
+    }
+    if (!delegateWritten) {
+      showToast('登入失敗：無法建立授權，請重試');
+      if (btn) { btn.disabled=false; btn.textContent='匿名登入'; }
+      return;
     }
 
     // Step 5: 標記 passcode 已使用
