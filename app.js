@@ -17,7 +17,7 @@ const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
 
-// 【修正 1】改用 browserLocalPersistence，確保匿名帳號的 session 不會秒死
+// 【修正 1】捨棄會秒殺狀態的 inMemoryPersistence，改為使用穩定的瀏覽器本地持久化
 window.__authPersistenceReady = (async function setupAuthPersistence() {
   try {
     await setPersistence(auth, browserLocalPersistence);
@@ -51,7 +51,7 @@ let searchOpen = false;
 let saveTimeout = null;
 let selectionRange = null;
 
-// 【修正 2】重整或初始化時，第一時間從本地快取把驗證碼對應的 uid 撈回來
+// 【修正 2】初始化與重整網頁時，第一時間去 localStorage 把匿名登入映射的真實 UID 找回來
 let passcodeTargetUid = localStorage.getItem('passcode_uid') || null; 
 
 let batchMode = false;
@@ -72,19 +72,18 @@ window.signInWithGoogle = async () => {
   }
 };
 
-// Handle redirect result (after Google login redirect back)
 getRedirectResult(auth).catch(e => {
   if (e && e.code !== 'auth/no-current-user') showToast('登入失敗：' + e.message);
 });
 
-// 【修正 3】重新梳理 Auth 狀態監聽邏輯，阻斷錯誤登出的無窮迴圈
+// 【修正 3】全面重整 Auth 狀態監聽，移除原本會不小心誤判並自動 signOut 的過期 Session 機制
 onAuthStateChanged(auth, async (user) => {
   if (window.__authPersistenceReady) {
     await window.__authPersistenceReady;
   }
 
   if (user) {
-    // 檢查快取，如果變數空了但快取有值，自動補回
+    // 防呆：如果全域變數空了，但本地快取還有，自動補回
     if (!passcodeTargetUid) {
       passcodeTargetUid = localStorage.getItem('passcode_uid');
     }
@@ -92,14 +91,13 @@ onAuthStateChanged(auth, async (user) => {
     if (user.isAnonymous && passcodeTargetUid) {
       currentUser = { uid: passcodeTargetUid, displayName: '匿名', photoURL: null, isAnonymous: true };
       
-      // 確保寫入快取，防止狀態丟失
+      // 確保快取被鎖定
       localStorage.setItem('passcode_uid', passcodeTargetUid);
 
       document.getElementById('auth-screen').style.display = 'none';
       document.getElementById('app').classList.add('visible');
       document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
       
-      // 寫入 delegates 節點
       setDoc(doc(db, 'delegates', user.uid), { 
         ownerUid: passcodeTargetUid, 
         usedPasscode: localStorage.getItem('passcode_code') 
@@ -109,7 +107,7 @@ onAuthStateChanged(auth, async (user) => {
     } else if (!user.isAnonymous) {
       currentUser = user;
       
-      // Google 登入，清除驗證碼快取
+      // Google 登入，不需要驗證碼快取，將其徹底抹除
       passcodeTargetUid = null;
       localStorage.removeItem('passcode_uid');
 
@@ -119,8 +117,8 @@ onAuthStateChanged(auth, async (user) => {
       subscribeData();
     }
     else {
-      // 只有在「既不是Google登入，又沒有任何驗證碼快取目標」的極端過期狀態下，才執行登出
-      console.warn('[auth] Stale anonymous session found. Cleaning up...');
+      // 只有在完全無效、且確定沒有任何快取記錄的過期狀態下，才進行安全清理
+      console.warn('[auth] Unmapped anonymous session found. Cleaning up...');
       currentUser = null;
       passcodeTargetUid = null;
       localStorage.removeItem('passcode_uid');
@@ -151,7 +149,7 @@ function renderUserAvatar() {
   }
 }
 
-// 【修正 4】確保登出時，把所有快取清理乾淨
+// 【修正 4】確保主動點選登出時，清理掉所有本地 localStorage 快取
 window.doSignOut = () => {
   if(confirm('確定要登出嗎？')) {
     localStorage.removeItem('passcode_uid');
@@ -162,7 +160,6 @@ window.doSignOut = () => {
     signOut(auth);
   }
 };
-
 // ── Firestore Subscribe ──
 function subscribeData() {
   const uid = currentUser.uid;
