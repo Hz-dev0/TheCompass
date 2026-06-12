@@ -13,119 +13,137 @@ const firebaseConfig = {
   appId: "1:130679459961:web:6a2f0fd8e6f4254864c4a8"
 };
 
-
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
 
-// Incognito mode often blocks/limits IndexedDB, which can cause
-// signInAnonymously() to "succeed" but the session not persist,
-// leaving auth.currentUser as null afterwards. Try IndexedDB ->
-// localStorage -> sessionStorage -> in-memory as a fallback chain.
+// 全局變數定義
+let currentUser = null;
+let currentFolderId = null;
+let currentFolderPath = [];
+let unsubscribeArticles = null;
+let unsubscribeFolders = null;
+let ctxTarget = null;
+
+// 【修正 1】改為使用瀏覽器本地持久化 (browserLocalPersistence)
+// 確保網頁重新整理時，Firebase 的登入狀態（包含匿名登入狀態）不會被瀏覽器抹除
 window.__authPersistenceReady = (async function setupAuthPersistence() {
   try {
-    await setPersistence(auth, inMemoryPersistence);
-    console.log('[auth] persistence set: IN_MEMORY (forced)');
+    await setPersistence(auth, browserLocalPersistence);
+    console.log('[auth] persistence set: browserLocalPersistence');
   } catch (e) {
-    console.warn('[auth] inMemoryPersistence failed', e);
+    console.warn('[auth] browserLocalPersistence failed, fallback to default', e);
   }
 })();
 
-// DEBUG: expose internals to window for console testing
-window.__debug = { auth, db, getDoc, doc, setDoc, signInAnonymously: null, getAuth, getFirestore, fbApp };
-import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js').then(m => {
-  window.__debug.signInAnonymously = m.signInAnonymously;
-  console.log('[debug] window.__debug ready', window.__debug);
-});
+// 【修正 2】初始化時，優先從本地快取讀取驗證碼登入的目標 UID
+// 這樣重新整理網頁時，即使變數被清空，也能立刻從瀏覽器快取中把 UID 找回來
+let passcodeTargetUid = localStorage.getItem('passcode_uid') || null;
 
-// ── State ──
-let currentUser = null;
-let articles = [];
-let folders = [];
-let currentFolderId = null; // null = root view (all)
-let currentFolderPath = []; // breadcrumb [{id, name}]
-let activeTag = '__all__';
-let currentArticleId = null;
-let mdMode = false;
-let newMdMode = false;
-let highlightMode = false;
-let highlightState = 'off'; // 'off' | 'selecting' | 'confirming'
-let pendingHighlightText = '';
-let searchOpen = false;
-let saveTimeout = null;
-let selectionRange = null;
-let passcodeTargetUid = null; // uid to load data for when using passcode login
-let batchMode = false;
-let batchSelected = new Set();
-
-// ── Auth ──
-window.signInWithGoogle = async () => {
-  const provider = new GoogleAuthProvider();
-  try {
-    await signInWithPopup(auth, provider);
-  } catch(e) {
-    // popup blocked (incognito, browser setting) → fallback to redirect
-    if (e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request' || e.code === 'auth/popup-closed-by-user') {
-      try { await signInWithRedirect(auth, provider); }
-      catch(e2) { showToast('登入失敗：' + e2.message); }
-    } else {
-      showToast('登入失敗：' + e.message);
-    }
+// 監聽 Firebase 驗證狀態變更
+onAuthStateChanged(auth, async (user) => {
+  console.log('[auth] onAuthStateChanged triggered. User:', user ? user.uid : 'null', 'Anonymous:', user ? user.isAnonymous : 'false');
+  
+  // 先確保持久化設定已經載入完成，避免非同步併發造成的狀態錯亂
+  if (window.__authPersistenceReady) {
+    await window.__authPersistenceReady;
   }
-};
 
-// Handle redirect result (after Google login redirect back)
-getRedirectResult(auth).catch(e => {
-  if (e && e.code !== 'auth/no-current-user') showToast('登入失敗：' + e.message);
-});
-
-onAuthStateChanged(auth, user => {
   if (user) {
-    // If this is an anonymous sign-in triggered by passcode, load the target uid's data
+    // 情況 A：使用者是匿名登入，且我們有記錄驗證碼對應的目標 UID
     if (user.isAnonymous && passcodeTargetUid) {
-      currentUser = { uid: passcodeTargetUid, displayName: '匿名', photoURL: null, isAnonymous: true };
+      console.log('[auth] Logged in via Passcode. Mapping to target UID:', passcodeTargetUid);
+      
+      // 建立虛擬的當前使用者物件，將 UID 指向驗證碼產生的那份資料 UID
+      currentUser = {
+        uid: passcodeTargetUid,
+        displayName: '驗證碼登入使用者',
+        photoURL: null,
+        isAnonymous: true
+      };
+      
+      // 【修正 3】同步寫入 localStorage，確保重整網頁時機制不中斷
+      localStorage.setItem('passcode_uid', passcodeTargetUid);
+
+      // 隱藏登入畫面，顯示主程式介面
       document.getElementById('auth-screen').style.display = 'none';
       document.getElementById('app').classList.add('visible');
-      document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
-      // Ensure delegate mapping exists for this anon session (handles new anon uid on reload)
-      setDoc(doc(db, 'delegates', user.uid), { ownerUid: passcodeTargetUid, usedPasscode: localStorage.getItem('passcode_code') }).catch(()=>{});
+      
+      // 確保介面上的使用者資訊正確顯示
+      document.getElementById('user-avatar').src = 'https://www.gstatic.com/images/branding/product/2x/avatar_anonymous_24dp.png';
+      document.getElementById('user-name').textContent = '驗證碼使用者';
+
+      // 開始讀取與監聽該 UID 的 Firestore 文章與資料夾列表
       subscribeData();
+    }
+    // 情況 B：使用者是透過 Google 帳號登入
+    else if (!user.isAnonymous) {
+      console.log('[auth] Logged in via Google. UID:', user.uid);
+      
+      currentUser = {
+        uid: user.uid,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        isAnonymous: false
+      };
+
+      // Google 登入不需要本地驗證碼快取，將其清除
       passcodeTargetUid = null;
-    } else if (!user.isAnonymous) {
-      currentUser = user;
+      localStorage.removeItem('passcode_uid');
+
       document.getElementById('auth-screen').style.display = 'none';
       document.getElementById('app').classList.add('visible');
-      renderUserAvatar();
+      
+      document.getElementById('user-avatar').src = user.photoURL || '';
+      document.getElementById('user-name').textContent = user.displayName || 'Google 使用者';
+
+      // 開始讀取與監聽該 Google 帳號 UID 的 Firestore 文章與資料夾列表
       subscribeData();
     }
-    // anonymous user without passcodeTargetUid = stale session, sign out
-    // (but skip if we already have an active passcode-based session)
-    else if (!currentUser) {
-      import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js').then(({signOut: so}) => so(auth));
+    // 情況 C：雖然有 user 狀態，但是是匿名登入卻沒有 passcodeTargetUid (防呆與清理過期 session)
+    else {
+      console.warn('[auth] Anonymous session found but no passcodeTargetUid mapping. Signing out...');
+      currentUser = null;
+      passcodeTargetUid = null;
+      localStorage.removeItem('passcode_uid');
+      
+      // 安全登出，導回登入首頁
+      await signOut(auth);
+      document.getElementById('app').classList.remove('visible');
+      document.getElementById('auth-screen').style.display = 'flex';
     }
-  } else {
+  } 
+  // 情況 D：完全沒有登入狀態 (未登入)
+  else {
+    console.log('[auth] No user logged in. Presenting auth screen.');
     currentUser = null;
-    document.getElementById('auth-screen').style.display = 'flex';
+    passcodeTargetUid = null;
+    localStorage.removeItem('passcode_uid');
+    
+    // 取消之前的 Firestore 即時監聽，避免殘留舊資料或報權限錯誤
+    if (unsubscribeArticles) { unsubscribeArticles(); unsubscribeArticles = null; }
+    if (unsubscribeFolders) { unsubscribeFolders(); unsubscribeFolders = null; }
+
     document.getElementById('app').classList.remove('visible');
+    document.getElementById('auth-screen').style.display = 'flex';
   }
 });
 
-function renderUserAvatar() {
-  const wrap = document.getElementById('user-avatar-wrap');
-  if (currentUser.photoURL) {
-    wrap.innerHTML = `<img class="user-avatar" src="${currentUser.photoURL}" title="${currentUser.displayName}\n點擊登出" onclick="doSignOut()">`;
-  } else {
-    const initials = (currentUser.displayName || 'U').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-    wrap.innerHTML = `<div class="user-initials" title="${currentUser.displayName}\n點擊登出" onclick="doSignOut()">${initials}</div>`;
-  }
-}
+// 登出按鈕邏輯的對應修正 (確保清除本地快取)
+window.doSignOut = async function doSignOut() {
+  console.log('[auth] doSignOut requested');
+  try {
+    currentUser = null;
+    passcodeTargetUid = null;
+    localStorage.removeItem('passcode_uid'); // 登出時徹底清除快取
+    
+    if (unsubscribeArticles) { unsubscribeArticles(); unsubscribeArticles = null; }
+    if (unsubscribeFolders) { unsubscribeFolders(); unsubscribeFolders = null; }
 
-window.doSignOut = () => {
-  if(confirm('確定要登出嗎？')) {
-    localStorage.removeItem('passcode_uid');
-    localStorage.removeItem('passcode_expires');
-    localStorage.removeItem('passcode_code');
-    signOut(auth);
+    await signOut(auth);
+    console.log('[auth] signOut complete');
+  } catch (error) {
+    console.error('[auth] signOut error:', error);
   }
 };
 
