@@ -3187,7 +3187,9 @@ function renderSettingsBody() {
 //     const code = Math.floor(100000+Math.random()*900000).toString();
 //     const expires = Date.now() + 2*60*1000;
 //     await admin.firestore().doc(`passcodes/${code}`).set({
-//       uid: req.auth.uid, expires, used: false
+//       ownerUid: req.auth.uid,  // Must be 'ownerUid' to match Firestore delegate create rule
+//       uid: req.auth.uid,         // Keep for backward compat
+//       expires, used: false
 //     });
 //     return { code, expires };
 //   });
@@ -3222,32 +3224,30 @@ window.copyPasscode = () => {
 
 console.log('[boot] defining loginWithPasscode');
 window.loginWithPasscode = async () => {
-  console.log('[LP] start');
   const code = document.getElementById('passcode-input').value.trim();
   if (code.length !== 6) { showToast('請輸入6位驗證碼'); return; }
   const btn = document.querySelector('#auth-screen .btn-primary');
   if (btn) { btn.disabled = true; btn.textContent = '驗證中…'; }
   try {
-    // Step 1: read passcode doc (publicly readable per rules)
-    console.log('[LP] step1: getDoc passcode...');
+    // Step 1: 讀取 passcode doc（規則允許公開讀）
     const snap = await getDoc(doc(db, 'passcodes', code));
     if (!snap.exists()) { showToast('驗證碼無效'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     const data = snap.data();
-    if (Date.now() > data.expires) { showToast('驗證碼已過期'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
-    // Check if delegate for this passcode already exists (prevents re-use)
-    // We do a best-effort check; the real guard is the delegate create rule.
-    console.log('[LP] step1 done, ownerUid=', data.uid);
+    const ownerUid = data.ownerUid || data.uid; // 相容新舊格式
+    if (!ownerUid) { showToast('驗證碼格式錯誤'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
+    if (Date.now() > Number(data.expires)) { showToast('驗證碼已過期'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
+    if (data.used) { showToast('驗證碼已使用過'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
+    console.log('[LP] passcode ok, ownerUid=', ownerUid);
 
-    // Step 2: sign in anonymously to get a real Firebase Auth token
-    console.log('[LP] step2: calling signInAnonymously...');
+    // Step 2: 匿名登入取得 Firebase Auth token
     const anonCred = await Promise.race([
       signInAnonymously(auth),
       new Promise((_, rej) => setTimeout(() => rej(new Error('登入逾時，請檢查網路或匿名登入是否已啟用')), 10000))
     ]);
     const anonUid = anonCred.user.uid;
-    console.log('[LP] step2 done, anonUid=', anonUid);
+    console.log('[LP] anonUid=', anonUid);
 
-    // Wait for auth state + ID token to be fully ready before Firestore writes
+    // 等 auth token 完全就緒
     await new Promise((resolve) => {
       if (auth.currentUser && auth.currentUser.uid === anonUid) {
         auth.currentUser.getIdToken().then(() => resolve());
@@ -3257,60 +3257,50 @@ window.loginWithPasscode = async () => {
         if (u && u.uid === anonUid) { unsub(); u.getIdToken().then(() => resolve()); }
       });
     });
-    console.log('[LP] auth ready, currentUser=', auth.currentUser?.uid);
 
-    // Step 3: write delegate doc with usedPasscode field.
-    // New rules require: delegates/{anonUid}.usedPasscode must point to a valid
-    // passcode doc whose ownerUid matches delegates/{anonUid}.ownerUid.
-    // Rules also block update/delete, so this is write-once — no used flag needed.
-    console.log('[LP] step3: writing delegate doc...');
+    // Step 3: 寫入 delegate doc（write-once，簡化規則不做 passcode get() 驗證）
     try {
       await Promise.race([
         setDoc(doc(db, 'delegates', anonUid), {
-          ownerUid: data.uid,
-          usedPasscode: code   // required by new Firestore rules for create validation
+          ownerUid: ownerUid,
+          usedPasscode: code
         }),
         new Promise((_, rej) => setTimeout(() => rej(new Error('delegate write timeout')), 8000))
       ]);
-      console.log('[LP] delegate written:', anonUid, '->', data.uid, 'passcode=', code);
+      console.log('[LP] delegate written:', anonUid, '->', ownerUid);
     } catch (e2) {
-      // If delegate already exists (update blocked by rules), that is fine —
-      // it means this anonUid session was already bound to an owner.
       if (e2?.code === 'permission-denied') {
-        console.warn('[LP] delegate already exists or permission denied:', e2.message);
-        // Check if the existing delegate matches this owner
+        // delegate 已存在（write-once 規則），確認是否同一個 owner
         const existingDel = await getDoc(doc(db, 'delegates', anonUid)).catch(() => null);
-        if (existingDel?.exists() && existingDel.data().ownerUid !== data.uid) {
+        if (existingDel?.exists() && existingDel.data().ownerUid !== ownerUid) {
           showToast('此匿名帳號已綁定其他用戶，請重試');
           if (btn) { btn.disabled=false; btn.textContent='匿名登入'; }
           return;
         }
-        // Same owner — proceed normally
+        console.log('[LP] delegate already exists for same owner, continuing');
       } else {
-        throw e2; // unexpected error — surface it
+        throw e2;
       }
     }
 
-    // NOTE: Passcode "used" flag is no longer written from frontend (rules forbid it).
-    // Single-use is enforced by: delegates are write-once (update blocked), so one
-    // anonUid can only ever bind to one owner. A second device can re-use the same
-    // code to create its own delegate, which is acceptable. If strict single-use is
-    // needed, implement it in the Cloud Function that generates passcodes.
+    // Step 4: 標記 passcode 為已使用（規則允許：只能把 used 從 false 改成 true）
+    try {
+      await setDoc(doc(db, 'passcodes', code), { used: true }, { merge: true });
+      console.log('[LP] passcode marked used');
+    } catch (e3) {
+      console.warn('[LP] mark used failed (non-critical):', e3.message);
+    }
 
-    // Step 4: store session locally
-    console.log('[LP] step4: finalizing session...');
-    localStorage.setItem('passcode_uid', data.uid);
+    // Step 5: 儲存 session 並進入 app
+    localStorage.setItem('passcode_uid', ownerUid);
     localStorage.setItem('passcode_code', code);
     localStorage.setItem('passcode_expires', data.expires);
     showToast('驗證成功，載入中…');
-
-    // Manually set up session (onAuthStateChanged may not re-fire if already anon)
-    currentUser = { uid: data.uid, _anonUid: anonUid, displayName: '匿名', photoURL: null, isAnonymous: true };
+    currentUser = { uid: ownerUid, _anonUid: anonUid, displayName: '匿名', photoURL: null, isAnonymous: true };
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app').classList.add('visible');
     document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
     passcodeTargetUid = null;
-    console.log('[LP] step5: subscribeData...');
     subscribeData();
     console.log('[LP] ALL DONE');
   } catch(e) {
