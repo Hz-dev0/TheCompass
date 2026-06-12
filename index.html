@@ -3261,7 +3261,7 @@ window.copyPasscode = () => {
 console.log('[boot] defining loginWithPasscode');
 window.loginWithPasscode = async () => {
   const code = document.getElementById('passcode-input').value.trim();
-  if (code.length !== 6) { showToast('請輸入6位驗證碼'); return; }
+  if (code.length !== 6) { showToast('請輸入驗證碼'); return; }
   const btn = document.querySelector('#auth-screen .btn-primary');
   if (btn) { btn.disabled = true; btn.textContent = '驗證中…'; }
   window._passcodeLoginInProgress = true;
