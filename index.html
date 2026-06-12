@@ -3218,28 +3218,28 @@ window.loginWithPasscode = async () => {
     if (data.used) { showToast('驗證碼已使用過'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     console.log('[LP] passcode ok, ownerUid=', ownerUid);
 
-    // Step 2: 匿名登入 — 用 onAuthStateChanged 確保 auth 完全就緒才繼續
-    const anonUser = await new Promise(async (resolve, reject) => {
-      // 先註冊監聽，再觸發登入，避免時機問題
-      const unsub = onAuthStateChanged(auth, (u) => {
-        if (u && u.isAnonymous) {
-          unsub();
-          resolve(u);
-        }
-      });
-      try {
-        await signInAnonymously(auth);
-      } catch(e) {
-        unsub();
-        reject(e);
-      }
-    });
-    const anonUid = anonUser.uid;
-    console.log('[LP] anonUid=', anonUid, 'auth.currentUser=', auth.currentUser?.uid);
+    // Step 2: 匿名登入 — 直接用 signInAnonymously 回傳的 credential
+    const anonCred = await Promise.race([
+      signInAnonymously(auth),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('登入逾時')), 15000))
+    ]);
+    const anonUid = anonCred.user.uid;
+    const anonUser = anonCred.user;
+    console.log('[LP] anonUid=', anonUid);
 
-    // Step 3: 強制刷新 token 確保 Firestore SDK 同步
-    await anonUser.getIdToken(true);
-    console.log('[LP] token refreshed, auth.currentUser=', auth.currentUser?.uid);
+    // Step 3: 等 onAuthStateChanged 確認 auth.currentUser 更新
+    if (auth.currentUser?.uid !== anonUid) {
+      await new Promise((resolve) => {
+        const unsub = onAuthStateChanged(auth, (u) => {
+          if (u?.uid === anonUid) { unsub(); resolve(); }
+        });
+      });
+    }
+    console.log('[LP] auth.currentUser=', auth.currentUser?.uid);
+
+    // Step 4: 強制刷新 token 確保 Firestore SDK 同步新的 auth 狀態
+    await auth.currentUser.getIdToken(true);
+    console.log('[LP] token refreshed');
 
     // Step 4: 寫入 delegate doc
     try {
@@ -3281,6 +3281,8 @@ window.loginWithPasscode = async () => {
     document.getElementById('app').classList.add('visible');
     document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
     passcodeTargetUid = null;
+    // 等待 Firestore 確認 delegate doc 已生效再讀取資料
+    await new Promise(r => setTimeout(r, 1500));
     subscribeData();
     console.log('[LP] ALL DONE');
   } catch(e) {
