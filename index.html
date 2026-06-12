@@ -1362,7 +1362,7 @@ console.log('[boot] inline script ran - BUILD v2-authstate-fix');
 <script type="module">
 console.log('[boot] module script started');
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, signInAnonymously, browserSessionPersistence, setPersistence } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, signInAnonymously, browserSessionPersistence, browserLocalPersistence, inMemoryPersistence, setPersistence } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot, query, where, serverTimestamp, waitForPendingWrites } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 console.log('[boot] firebase modules imported');
 
@@ -1379,7 +1379,7 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
-// 確保無痕視窗也能維持 auth 狀態（用 session 而非 local）
+// 無痕視窗用 sessionStorage，一般視窗用 localStorage
 setPersistence(auth, browserSessionPersistence).catch(e => console.warn('setPersistence failed:', e));
 
 // DEBUG: expose internals to window for console testing
@@ -3218,7 +3218,8 @@ window.loginWithPasscode = async () => {
     if (data.used) { showToast('驗證碼已使用過'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     console.log('[LP] passcode ok, ownerUid=', ownerUid);
 
-    // Step 2: 匿名登入 — 直接用 signInAnonymously 回傳的 credential
+    // Step 2: 匿名登入 — 用 inMemoryPersistence 避免 IndexedDB 競爭問題
+    await setPersistence(auth, inMemoryPersistence);
     const anonCred = await Promise.race([
       signInAnonymously(auth),
       new Promise((_, rej) => setTimeout(() => rej(new Error('登入逾時')), 15000))
