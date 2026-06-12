@@ -1363,7 +1363,7 @@ console.log('[boot] inline script ran - BUILD v2-authstate-fix');
 console.log('[boot] module script started');
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot, query, where, serverTimestamp, waitForPendingWrites } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 console.log('[boot] firebase modules imported');
 
 const firebaseConfig = {
@@ -3247,7 +3247,7 @@ window.loginWithPasscode = async () => {
     const anonUid = anonCred.user.uid;
     console.log('[LP] anonUid=', anonUid);
 
-    // 等 auth token 完全就緒，並強制刷新確保 Firestore SDK 同步
+    // 等 auth token 完全就緒
     await new Promise((resolve) => {
       if (auth.currentUser && auth.currentUser.uid === anonUid) {
         auth.currentUser.getIdToken(true).then(() => resolve());
@@ -3257,8 +3257,11 @@ window.loginWithPasscode = async () => {
         if (u && u.uid === anonUid) { unsub(); u.getIdToken(true).then(() => resolve()); }
       });
     });
-    // 額外等待 Firestore SDK 內部同步新的 auth 狀態
-    await new Promise(r => setTimeout(r, 500));
+    // 用一個輕量的 Firestore 讀取來確認 SDK 已套用新的 auth 狀態
+    // 讀自己的 delegate doc（不存在也沒關係，permission-denied 也代表 auth 已生效）
+    await getDoc(doc(db, 'delegates', anonUid)).catch(() => {});
+    // 再給 100ms 緩衝
+    await new Promise(r => setTimeout(r, 100));
 
     // Step 3: 寫入 delegate doc（write-once，簡化規則不做 passcode get() 驗證）
     try {
