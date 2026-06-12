@@ -3178,39 +3178,16 @@ function renderSettingsBody() {
 }
 
 // ── Passcode ──
-// NOTE: New Firestore rules forbid frontend writes to /passcodes.
-// Passcode generation MUST go through a Cloud Function (Firebase Admin SDK).
-// 1. Deploy the generatePasscode Cloud Function (see comment below)
-// 2. Set GENERATE_PASSCODE_FN_URL to your function URL
-//
-// Minimal Cloud Function (firebase-functions v2 / callable):
-//   exports.generatePasscode = onCall(async (req) => {
-//     if (!req.auth) throw new HttpsError("unauthenticated", "Login required");
-//     const code = Math.floor(100000+Math.random()*900000).toString();
-//     const expires = Date.now() + 2*60*1000;
-//     await admin.firestore().doc(`passcodes/${code}`).set({
-//       ownerUid: req.auth.uid,  // Must be 'ownerUid' to match Firestore delegate create rule
-//       uid: req.auth.uid,         // Keep for backward compat
-//       expires, used: false
-//     });
-//     return { code, expires };
-//   });
-const GENERATE_PASSCODE_FN_URL = null; // TODO: set your Cloud Function URL
-
 window.generatePasscode = async () => {
-  if (!GENERATE_PASSCODE_FN_URL) {
-    showToast('請先部署 Cloud Function 並設定 GENERATE_PASSCODE_FN_URL');
-    return;
-  }
   try {
-    const idToken = await auth.currentUser.getIdToken();
-    const res = await fetch(GENERATE_PASSCODE_FN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
-      body: JSON.stringify({})
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = Date.now() + 10 * 60 * 1000; // 10 分鐘有效
+    await setDoc(doc(db, 'passcodes', code), {
+      ownerUid: currentUser.uid,
+      uid: currentUser.uid,
+      expires,
+      used: false
     });
-    if (!res.ok) throw new Error('伺服器錯誤 ' + res.status);
-    const { code } = await res.json();
     document.getElementById('passcode-code').textContent = code;
     document.getElementById('passcode-modal').classList.add('open');
     document.getElementById('settings-modal').classList.remove('open');
