@@ -564,12 +564,11 @@ function getFilteredArticles() {
   return list;
 }
 
-// ── Virtual scroll state ──
-const VS_ROW_ESTIMATE = 40; // px, fallback estimate before measurement
-const VS_BUFFER = 6; // extra rows rendered above/below viewport
-let vsRowHeight = VS_ROW_ESTIMATE;
+// ── Pagination state ──
+const ARTICLES_PER_PAGE = 20;
+let currentPage = 1;
+let lastFilterKey = '';
 let vsFiltered = [];
-let vsScrollHandlerAttached = false;
 
 function buildArticleRow(art) {
   const row = document.createElement('div');
@@ -641,71 +640,81 @@ function buildArticleRow(art) {
 }
 
 function renderArticleList() {
-  const list = document.getElementById('article-list');
+  const rowsEl = document.getElementById('article-rows');
+  const pagerEl = document.getElementById('pagination-bar');
   vsFiltered = getFilteredArticles();
+
   if (vsFiltered.length === 0) {
-    list.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>還沒有文章</p><button class="empty-cta" onclick="openNewModal()">+ 新增第一篇</button></div>`;
+    rowsEl.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>還沒有文章</p><button class="empty-cta" onclick="openNewModal()">+ 新增第一篇</button></div>`;
+    pagerEl.innerHTML = '';
     return;
   }
 
-  // Set up virtual scroll container structure once
-  if (!list.querySelector('.vs-spacer-top')) {
-    list.innerHTML = `<div class="vs-spacer-top"></div><div class="vs-rows"></div><div class="vs-spacer-bottom"></div>`;
+  // Reset to page 1 whenever the active filter (folder/tag/search) changes
+  const filterKey = `${currentFolderId}|${activeTag}|${document.getElementById('search-input')?.value.trim().toLowerCase() || ''}`;
+  if (filterKey !== lastFilterKey) {
+    currentPage = 1;
+    lastFilterKey = filterKey;
   }
 
-  if (!vsScrollHandlerAttached) {
-    list.addEventListener('scroll', () => requestAnimationFrame(vsRender));
-    window.addEventListener('resize', () => requestAnimationFrame(vsRender));
-    vsScrollHandlerAttached = true;
-  }
+  const totalPages = Math.max(1, Math.ceil(vsFiltered.length / ARTICLES_PER_PAGE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
 
-  vsRender();
-}
-
-function vsRender() {
-  const list = document.getElementById('article-list');
-  const topSpacer = list.querySelector('.vs-spacer-top');
-  const bottomSpacer = list.querySelector('.vs-spacer-bottom');
-  const rowsEl = list.querySelector('.vs-rows');
-  if (!topSpacer || !bottomSpacer || !rowsEl) return;
-
-  const total = vsFiltered.length;
-  const scrollTop = list.scrollTop;
-  const viewportH = list.clientHeight || 600;
-
-  let startIdx = Math.max(0, Math.floor(scrollTop / vsRowHeight) - VS_BUFFER);
-  let visibleCount = Math.ceil(viewportH / vsRowHeight) + VS_BUFFER * 2;
-  let endIdx = Math.min(total, startIdx + visibleCount);
-
-  topSpacer.style.height = (startIdx * vsRowHeight) + 'px';
-  bottomSpacer.style.height = ((total - endIdx) * vsRowHeight) + 'px';
+  const start = (currentPage - 1) * ARTICLES_PER_PAGE;
+  const end = Math.min(vsFiltered.length, start + ARTICLES_PER_PAGE);
 
   rowsEl.innerHTML = '';
-  for (let i = startIdx; i < endIdx; i++) {
+  for (let i = start; i < end; i++) {
     rowsEl.appendChild(buildArticleRow(vsFiltered[i]));
   }
+  rowsEl.scrollTop = 0;
 
-  // Measure actual row height from a rendered row and refine if needed
-  const sample = rowsEl.querySelector('.article-row');
-  if (sample) {
-    const measured = sample.getBoundingClientRect().height;
-    if (measured > 0 && Math.abs(measured - vsRowHeight) > 1) {
-      vsRowHeight = measured;
-      // Re-run with corrected height for accurate spacers
-      const newStart = Math.max(0, Math.floor(scrollTop / vsRowHeight) - VS_BUFFER);
-      const newVisible = Math.ceil(viewportH / vsRowHeight) + VS_BUFFER * 2;
-      const newEnd = Math.min(total, newStart + newVisible);
-      if (newStart !== startIdx || newEnd !== endIdx) {
-        topSpacer.style.height = (newStart * vsRowHeight) + 'px';
-        bottomSpacer.style.height = ((total - newEnd) * vsRowHeight) + 'px';
-        rowsEl.innerHTML = '';
-        for (let i = newStart; i < newEnd; i++) {
-          rowsEl.appendChild(buildArticleRow(vsFiltered[i]));
-        }
-      }
+  renderPaginationBar(totalPages);
+}
+
+function renderPaginationBar(totalPages) {
+  const pagerEl = document.getElementById('pagination-bar');
+  if (totalPages <= 1) { pagerEl.innerHTML = ''; return; }
+
+  const makeBtn = (label, page, opts = {}) => {
+    const { active = false, disabled = false, ellipsis = false } = opts;
+    const cls = 'page-btn' + (active ? ' active' : '') + (ellipsis ? ' ellipsis' : '');
+    const dis = disabled ? 'disabled' : '';
+    const onclick = ellipsis || disabled ? '' : `onclick="goToPage(${page})"`;
+    return `<button class="${cls}" ${dis} ${onclick}>${label}</button>`;
+  };
+
+  let html = '';
+  html += makeBtn('‹', currentPage - 1, { disabled: currentPage === 1 });
+
+  // Build page number list with ellipses
+  const pages = [];
+  const windowSize = 1; // pages shown around current
+  for (let p = 1; p <= totalPages; p++) {
+    if (p === 1 || p === totalPages || Math.abs(p - currentPage) <= windowSize) {
+      pages.push(p);
+    } else if (pages[pages.length - 1] !== '…') {
+      pages.push('…');
     }
   }
+  pages.forEach(p => {
+    if (p === '…') html += makeBtn('…', 0, { ellipsis: true });
+    else html += makeBtn(String(p), p, { active: p === currentPage });
+  });
+
+  html += makeBtn('›', currentPage + 1, { disabled: currentPage === totalPages });
+  html += `<span class="page-info">共 ${vsFiltered.length} 篇</span>`;
+
+  pagerEl.innerHTML = html;
 }
+
+window.goToPage = (page) => {
+  const totalPages = Math.max(1, Math.ceil(vsFiltered.length / ARTICLES_PER_PAGE));
+  if (page < 1 || page > totalPages || page === currentPage) return;
+  currentPage = page;
+  renderArticleList();
+};
 
 window.filterArticles = () => renderArticleList();
 
