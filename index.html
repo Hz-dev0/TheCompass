@@ -192,6 +192,10 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .folder-add { width: 22px; height: 22px; border-radius: 4px; border: none; background: transparent; color: var(--text3); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .folder-add:hover { background: var(--surface2); color: var(--text); }
 .folder-add svg { width: 14px; height: 14px; }
+#folder-move-toggle { font-size: 14px; line-height: 1; }
+#folder-move-toggle.active { background: var(--accent-light); color: var(--accent); }
+.folder-tree.move-mode .folder-item:not(.folder-back) { cursor: grab; }
+.folder-tree.move-mode .folder-item.folder-move-target { background: var(--accent-light); outline: 1px dashed var(--accent); }
 
 .folder-tree { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
 .folder-item {
@@ -205,7 +209,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .folder-item svg { width: 14px; height: 14px; flex-shrink: 0; }
 .folder-item .count { margin-left: auto; font-size: 11px; color: var(--text3); }
 .folder-item .count.empty { color: var(--border2); font-style: italic; }
-.folder-item.folder-empty > svg, .folder-item.folder-empty > span:first-of-type { opacity: 0.5; }
+.folder-item.folder-empty { opacity: 0.6; }
 .folder-indent { padding-left: 22px; }
 .folder-back { color: var(--accent); font-size: 12px; }
 .folder-back svg { color: var(--accent); }
@@ -633,6 +637,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   transition: flex 0.2s ease;
   background: linear-gradient(180deg, var(--surface) 0%, #fdf8f9 100%);
   position: relative;
+  display: flex; flex-direction: column;
 }
 .reading-body-pane.full { border-right: none; }
 .reading-notes-pane {
@@ -658,19 +663,32 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 .art-body-rendered {
   font-family: var(--font-serif); font-size: var(--reading-font-size, 16px); line-height: 1.95;
   color: var(--text); word-break: break-word; max-width: 65ch; margin: 0 auto;
+  width: 100%;
 }
 .art-body-rendered mark {
   background: var(--highlight-bg); border-bottom: 2px solid var(--highlight-border);
   padding: 0 2px; border-radius: 2px;
 }
+.art-body-rendered .md-table, .art-body-viewonly .md-table {
+  border-collapse: collapse; margin: 12px 0; font-size: 0.92em; width: auto; max-width: 100%;
+}
+.art-body-rendered .md-table th, .art-body-rendered .md-table td,
+.art-body-viewonly .md-table th, .art-body-viewonly .md-table td {
+  border: 1px solid var(--border); padding: 6px 10px; text-align: left;
+}
+.art-body-rendered .md-table th, .art-body-viewonly .md-table th {
+  background: var(--surface2); font-weight: 500;
+}
 .art-body-editor {
-  width: 100%; min-height: 120px; font-family: var(--font-sans); font-size: 14px;
+  width: 100%; min-height: 120px; font-family: var(--font-sans); font-size: var(--reading-font-size, 14px);
   line-height: 1.8; color: var(--text); background: transparent;
   border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 16px; resize: none; outline: none; overflow: hidden;
+  padding: 16px; resize: none; outline: none; overflow: auto;
   transition: border-color var(--transition);
+  flex: 1; box-sizing: border-box; display: block;
 }
 .art-body-editor:focus { border-color: var(--accent); }
+#reading-body-content { display: flex; flex-direction: column; flex: 1; min-height: 100%; }
 
 /* Dropdown popups (tag picker, folder picker) */
 .tb-dropdown {
@@ -861,7 +879,9 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 .art-body-rendered.highlight-mode { cursor: text; }
 .art-body-rendered.highlight-mode ::selection { background: #ffd6e4; }
 
-/* New article body: hide border when in view mode */
+.reading-body-pane#new-body-pane { display: flex; flex-direction: column; }
+.reading-body-pane#new-body-pane .art-body-editor { width: 100%; }
+.reading-body-pane#new-body-pane .art-body-viewonly { width: 100%; flex: 1; }
 .art-body-viewonly {
   font-family: var(--font-serif); font-size: 16px; line-height: 1.95;
   color: var(--text); white-space: pre-wrap; word-break: break-word;
@@ -1119,9 +1139,12 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
       <div class="folder-panel-inner">
         <div class="folder-header">
           <span>資料夾</span>
-          <button class="folder-add" title="新增資料夾" onclick="openFolderModal()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-          </button>
+          <div style="display:flex;align-items:center;gap:4px">
+            <button class="folder-add" id="folder-move-toggle" title="移動模式" onclick="toggleFolderMoveMode()">⇅</button>
+            <button class="folder-add" title="新增資料夾" onclick="openFolderModal()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+          </div>
         </div>
         <div class="folder-tree" id="folder-tree"></div>
       </div>
@@ -1313,7 +1336,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   <!-- Body + Notes split (same as reading page) -->
   <div class="reading-body-wrap">
     <div class="reading-body-pane" id="new-body-pane">
-      <textarea class="art-body-editor" id="new-body" placeholder="貼上文章內文…" style="min-height:300px;height:auto" oninput="autoResizeNewBody(this)"></textarea>
+      <textarea class="art-body-editor" id="new-body" placeholder="貼上文章內文…"></textarea>
     </div>
     <div class="reading-notes-pane" id="new-notes-pane">
       <div class="notes-pane-label">
@@ -1454,6 +1477,7 @@ let saveTimeout = null;
 let selectionRange = null;
 let passcodeTargetUid = null; // uid to load data for when using passcode login
 let batchMode = false;
+let folderMoveMode = false;
 let batchSelected = new Set();
 
 // ── Auth ──
@@ -1744,11 +1768,34 @@ function renderFolderTree() {
     const parentId = currentFolderPath.length > 1 ? currentFolderPath[currentFolderPath.length-2].id : null;
     backItem.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg> 上一層`;
     backItem.onclick = () => {
+      if (folderMoveMode) return;
       currentFolderPath.pop();
       currentFolderId = parentId;
       renderFolderTree();
       renderArticleList();
     };
+    // In move mode, dropping a folder here moves it up one level (out of current folder)
+    if (folderMoveMode) {
+      backItem.addEventListener('dragover', e => {
+        if (!e.dataTransfer.types.includes('folderId')) return;
+        e.preventDefault();
+        backItem.classList.add('folder-move-target');
+      });
+      backItem.addEventListener('dragleave', () => backItem.classList.remove('folder-move-target'));
+      backItem.addEventListener('drop', async e => {
+        e.preventDefault();
+        backItem.classList.remove('folder-move-target');
+        const srcFolderId = e.dataTransfer.getData('folderId');
+        if (!srcFolderId) return;
+        const srcFolder = folders.find(f => f.id === srcFolderId);
+        if (!srcFolder) return;
+        const newParentId = parentId; // grandparent of current folder
+        await updateDoc(doc(db, 'folders', srcFolderId), { parentId: newParentId || null });
+        srcFolder.parentId = newParentId || null;
+        renderFolderTree();
+        showToast(`「${srcFolder.name}」已移至上一層`);
+      });
+    }
     tree.appendChild(backItem);
   }
 
@@ -1760,13 +1807,13 @@ function renderFolderTree() {
     tree.appendChild(crumb);
   }
 
+  tree.classList.toggle('move-mode', folderMoveMode);
+
   // Show children of current folder
   const parentId = (currentFolderId === '__uncat__' || currentFolderId === null) ? null : currentFolderId;
   const children = folders
     .filter(f => (f.parentId||null) === parentId)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-
-  let folderDragSrc = null;
 
   children.forEach((folder, idx) => {
     const count = articles.filter(a => a.folderId === folder.id).length;
@@ -1778,84 +1825,140 @@ function renderFolderTree() {
     item.dataset.folderIdx = idx;
     item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(folder.name)} <span class="count${isEmpty ? ' empty' : ''}">${count || '—'}</span>`;
     item.onclick = (e) => {
-      if (item.classList.contains('folder-dragging')) return;
+      if (item.classList.contains('folder-dragging') || folderMoveMode) return;
       currentFolderId = folder.id;
       currentFolderPath = [...currentFolderPath, {id: folder.id, name: folder.name}];
       renderFolderTree();
       renderArticleList();
     };
     item.addEventListener('contextmenu', e => openCtxMenu(e, 'folder', folder.id, folder.name));
-    // Drag article onto folder
-    item.addEventListener('dragover', e => {
-      e.preventDefault();
-      const isDraggingFolder = e.dataTransfer.types.includes('folderId');
-      if (!isDraggingFolder) {
-        item.classList.add('drag-over');
-      } else {
+
+    if (folderMoveMode) {
+      // ── Move mode: dragging a folder onto another folder nests it inside ──
+      item.addEventListener('dragover', e => {
+        if (!e.dataTransfer.types.includes('folderId')) return;
+        e.preventDefault();
+        item.classList.add('folder-move-target');
+      });
+      item.addEventListener('dragleave', () => item.classList.remove('folder-move-target'));
+      item.addEventListener('drop', async e => {
+        e.preventDefault();
+        item.classList.remove('folder-move-target');
+        const srcFolderId = e.dataTransfer.getData('folderId');
+        if (!srcFolderId || srcFolderId === folder.id) return;
+        const srcFolder = folders.find(f => f.id === srcFolderId);
+        if (!srcFolder) return;
+        // prevent moving a folder into its own descendant
+        let p = folder.id;
+        const visited = new Set();
+        while (p) {
+          if (p === srcFolderId) { showToast('不能移到自己的子資料夾中'); return; }
+          if (visited.has(p)) break;
+          visited.add(p);
+          const pf = folders.find(f => f.id === p);
+          p = pf ? (pf.parentId || null) : null;
+        }
+        await updateDoc(doc(db, 'folders', srcFolderId), { parentId: folder.id });
+        srcFolder.parentId = folder.id;
+        renderFolderTree();
+        showToast(`已移入「${folder.name}」`);
+      });
+      // Article drop still allowed onto folders even in move mode
+      item.addEventListener('dragover', e => {
+        if (e.dataTransfer.types.includes('articleId')) { e.preventDefault(); item.classList.add('drag-over'); }
+      });
+      item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+      item.addEventListener('drop', async e => {
+        const artId = e.dataTransfer.getData('articleId');
+        if (!artId) return;
+        e.preventDefault();
         item.classList.remove('drag-over');
-        // Show reorder hint
-        const rect = item.getBoundingClientRect();
-        const mid = rect.top + rect.height / 2;
-        item.classList.remove('folder-drop-above', 'folder-drop-below');
-        if (e.clientY < mid) item.classList.add('folder-drop-above');
-        else item.classList.add('folder-drop-below');
-      }
-    });
-    item.addEventListener('dragleave', (e) => {
-      item.classList.remove('drag-over', 'folder-drop-above', 'folder-drop-below');
-    });
-    item.addEventListener('drop', async e => {
-      e.preventDefault();
-      item.classList.remove('drag-over', 'folder-drop-above', 'folder-drop-below');
-      const artId = e.dataTransfer.getData('articleId');
-      const srcFolderId = e.dataTransfer.getData('folderId');
-      if (artId) {
         await updateDoc(doc(db, 'articles', artId), { folderId: folder.id });
         showToast(`已移到「${folder.name}」`);
         const art = articles.find(a => a.id === artId);
         if (art) art.folderId = folder.id;
         renderFolderTree();
-      } else if (srcFolderId && srcFolderId !== folder.id) {
-        // Reorder: determine above or below
-        const rect = item.getBoundingClientRect();
-        const insertAbove = e.clientY < rect.top + rect.height / 2;
-        const srcFolder = folders.find(f => f.id === srcFolderId);
-        const targetFolder = folder;
-        if (!srcFolder) return;
-        // Re-sort siblings excluding src
-        const sibs = folders
-          .filter(f => (f.parentId||null) === parentId && f.id !== srcFolderId)
-          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        const targetIdx = sibs.findIndex(f => f.id === targetFolder.id);
-        const insertIdx = insertAbove ? targetIdx : targetIdx + 1;
-        sibs.splice(insertIdx, 0, srcFolder);
-        // Save new orders
-        const updates = sibs.map((f, i) => updateDoc(doc(db, 'folders', f.id), { order: i }));
-        await Promise.all(updates);
-        // Update local state
-        sibs.forEach((f, i) => { const lf = folders.find(x => x.id === f.id); if (lf) lf.order = i; });
-        renderFolderTree();
-        showToast('資料夾已排序');
-      }
-    });
-    // Folder drag-to-reorder events
+      });
+    } else {
+      // ── Normal mode: drag article onto folder OR drag folder to reorder (no nesting) ──
+      item.addEventListener('dragover', e => {
+        e.preventDefault();
+        const isDraggingFolder = e.dataTransfer.types.includes('folderId');
+        if (!isDraggingFolder) {
+          item.classList.add('drag-over');
+        } else {
+          item.classList.remove('drag-over');
+          // Show reorder line based on cursor position relative to target
+          const rect = item.getBoundingClientRect();
+          const mid = rect.top + rect.height / 2;
+          item.classList.remove('folder-drop-above', 'folder-drop-below');
+          if (e.clientY < mid) item.classList.add('folder-drop-above');
+          else item.classList.add('folder-drop-below');
+        }
+      });
+      item.addEventListener('dragleave', (e) => {
+        item.classList.remove('drag-over', 'folder-drop-above', 'folder-drop-below');
+      });
+      item.addEventListener('drop', async e => {
+        e.preventDefault();
+        item.classList.remove('drag-over', 'folder-drop-above', 'folder-drop-below');
+        const artId = e.dataTransfer.getData('articleId');
+        const srcFolderId = e.dataTransfer.getData('folderId');
+        if (artId) {
+          await updateDoc(doc(db, 'articles', artId), { folderId: folder.id });
+          showToast(`已移到「${folder.name}」`);
+          const art = articles.find(a => a.id === artId);
+          if (art) art.folderId = folder.id;
+          renderFolderTree();
+        } else if (srcFolderId && srcFolderId !== folder.id) {
+          // Pure reorder among siblings: insert above or below target
+          const rect = item.getBoundingClientRect();
+          const insertAbove = e.clientY < rect.top + rect.height / 2;
+          const srcFolder = folders.find(f => f.id === srcFolderId);
+          const targetFolder = folder;
+          if (!srcFolder) return;
+          // Only reorder if same parent (move mode handles cross-folder moves)
+          if ((srcFolder.parentId||null) !== parentId) {
+            showToast('請使用移動模式跨資料夾移動');
+            return;
+          }
+          const sibs = folders
+            .filter(f => (f.parentId||null) === parentId && f.id !== srcFolderId)
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          const targetIdx = sibs.findIndex(f => f.id === targetFolder.id);
+          const insertIdx = insertAbove ? targetIdx : targetIdx + 1;
+          sibs.splice(insertIdx, 0, srcFolder);
+          const updates = sibs.map((f, i) => updateDoc(doc(db, 'folders', f.id), { order: i }));
+          await Promise.all(updates);
+          sibs.forEach((f, i) => { const lf = folders.find(x => x.id === f.id); if (lf) lf.order = i; });
+          renderFolderTree();
+          showToast('資料夾已排序');
+        }
+      });
+    }
+
+    // Folder drag-to-reorder/move events (common to both modes)
     item.addEventListener('dragstart', e => {
       // Only initiate folder drag if not dragging an article row
       e.stopPropagation();
-      folderDragSrc = folder.id;
       e.dataTransfer.setData('folderId', folder.id);
       e.dataTransfer.effectAllowed = 'move';
       setTimeout(() => item.classList.add('folder-dragging'), 0);
     });
     item.addEventListener('dragend', () => {
-      item.classList.remove('folder-dragging', 'folder-drop-above', 'folder-drop-below');
-      folderDragSrc = null;
+      item.classList.remove('folder-dragging', 'folder-drop-above', 'folder-drop-below', 'folder-move-target');
       // Clean up all siblings
-      tree.querySelectorAll('.folder-item').forEach(el => el.classList.remove('folder-drop-above', 'folder-drop-below'));
+      tree.querySelectorAll('.folder-item').forEach(el => el.classList.remove('folder-drop-above', 'folder-drop-below', 'folder-move-target', 'drag-over'));
     });
     tree.appendChild(item);
   });
 }
+
+window.toggleFolderMoveMode = () => {
+  folderMoveMode = !folderMoveMode;
+  document.getElementById('folder-move-toggle').classList.toggle('active', folderMoveMode);
+  renderFolderTree();
+};
 
 function renderFolderSelects() {
   // For new article modal
@@ -2152,6 +2255,7 @@ window.openReading = (id) => {
   if (!art) return;
   currentArticleId = id;
   mdMode = false;
+  resetReadingFontSizeToDefault();
   highlightMode = false;
   highlightState = 'off';
   pendingHighlightText = '';
@@ -2260,6 +2364,44 @@ function renderMarkdown(text) {
     let line = lines[i];
     if (line.startsWith('\x60\x60\x60')) { inPre = !inPre; result += inPre ? '<pre><code>' : '</code></pre>\n'; continue; }
     if (inPre) { result += escHtml(line) + '\n'; continue; }
+    // table: header row followed by separator row (---|---)
+    if (/^\s*\|?.+\|.+\|?\s*$/.test(line) && i+1 < lines.length && /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(lines[i+1])) {
+      const splitRow = (row) => {
+        let r = row.trim();
+        if (r.startsWith('|')) r = r.slice(1);
+        if (r.endsWith('|')) r = r.slice(0, -1);
+        return r.split('|').map(c => c.trim());
+      };
+      const headerCells = splitRow(line);
+      const aligns = splitRow(lines[i+1]).map(c => {
+        const left = c.startsWith(':'), right = c.endsWith(':');
+        if (left && right) return 'center';
+        if (right) return 'right';
+        if (left) return 'left';
+        return '';
+      });
+      let tbl = '<table class="md-table"><thead><tr>';
+      headerCells.forEach((c, idx) => {
+        const style = aligns[idx] ? ` style="text-align:${aligns[idx]}"` : '';
+        tbl += `<th${style}>${inlineMarkdown(c)}</th>`;
+      });
+      tbl += '</tr></thead><tbody>';
+      let j = i + 2;
+      while (j < lines.length && /\|/.test(lines[j]) && lines[j].trim() !== '') {
+        const cells = splitRow(lines[j]);
+        tbl += '<tr>';
+        cells.forEach((c, idx) => {
+          const style = aligns[idx] ? ` style="text-align:${aligns[idx]}"` : '';
+          tbl += `<td${style}>${inlineMarkdown(c)}</td>`;
+        });
+        tbl += '</tr>';
+        j++;
+      }
+      tbl += '</tbody></table>\n';
+      result += tbl;
+      i = j - 1;
+      continue;
+    }
     // headings
     if (/^### /.test(line)) { result += '<h3>' + inlineMarkdown(line.slice(4)) + '</h3>\n'; continue; }
     if (/^## /.test(line)) { result += '<h2>' + inlineMarkdown(line.slice(3)) + '</h2>\n'; continue; }
@@ -2293,11 +2435,6 @@ function renderBodyPane(art) {
   const pane = document.getElementById('reading-body-content');
   if (mdMode) {
     pane.innerHTML = `<textarea class="art-body-editor" id="body-editor" oninput="scheduleFieldSave('body', this.value)">${escHtml(art.body||'')}</textarea>`;
-    // Auto-height
-    setTimeout(() => {
-      const ta = document.getElementById('body-editor');
-      if (ta) { ta.style.height = 'auto'; ta.style.height = Math.max(200, ta.scrollHeight) + 'px'; ta.style.minHeight = 'unset'; }
-    }, 10);
   } else {
     let html = renderMarkdown(art.body||'');
     if (art.highlight) {
@@ -2336,17 +2473,11 @@ window.autoResizeTitle = (el) => {
   el.style.height = el.scrollHeight + 'px';
 };
 
-// Resize new-article body without scrolling the pane to top
-window.autoResizeNewBody = (el) => {
-  const pane = document.getElementById('new-body-pane');
-  const scrollTop = pane ? pane.scrollTop : 0;
-  el.style.height = 'auto';
-  el.style.height = Math.max(300, el.scrollHeight) + 'px';
-  if (pane) pane.scrollTop = scrollTop;
-};
-
 // ── Reading font size ──
-let readingFontSize = parseInt(localStorage.getItem('reading_font_size') || '16');
+// `reading_font_size_default` is the persisted setting (Settings > 外觀).
+// `readingFontSize` is the active session value; +/- adjustments are temporary
+// and reset to the saved default each time an article is opened.
+let readingFontSize = parseInt(localStorage.getItem('reading_font_size_default') || '16');
 function applyReadingFontSize() {
   document.documentElement.style.setProperty('--reading-font-size', readingFontSize + 'px');
   const lbl = document.getElementById('reading-font-size-label');
@@ -2354,14 +2485,20 @@ function applyReadingFontSize() {
 }
 applyReadingFontSize();
 window.changeFontSize = (delta) => {
-  readingFontSize = Math.min(26, Math.max(12, readingFontSize + delta));
-  localStorage.setItem('reading_font_size', readingFontSize);
+  // Temporary, session-only adjustment — not saved.
+  readingFontSize = Math.min(32, Math.max(12, readingFontSize + delta));
+  applyReadingFontSize();
+};
+
+window.resetReadingFontSizeToDefault = () => {
+  readingFontSize = parseInt(localStorage.getItem('reading_font_size_default') || '16');
   applyReadingFontSize();
 };
 
 window.applyDefaultFontSize = (size) => {
-  readingFontSize = Math.min(26, Math.max(12, size));
-  localStorage.setItem('reading_font_size', readingFontSize);
+  const s = Math.min(32, Math.max(12, size));
+  localStorage.setItem('reading_font_size_default', s);
+  readingFontSize = s;
   applyReadingFontSize();
   showToast('預設字體大小已更新');
 };
@@ -2438,7 +2575,8 @@ window.toggleNewMd = () => {
   const pane = document.getElementById('new-body-pane');
   const textarea = document.getElementById('new-body');
   const viewDiv = document.getElementById('new-body-view');
-  if (newMdMode) {
+  if (!newMdMode) {
+    // switching to view (rendered) mode
     if (!viewDiv) {
       const div = document.createElement('div');
       div.id = 'new-body-view';
@@ -2450,9 +2588,11 @@ window.toggleNewMd = () => {
     vd.style.display = 'block';
     textarea.style.display = 'none';
   } else {
+    // switching to edit (raw) mode
     const vd = document.getElementById('new-body-view');
     if (vd) vd.style.display = 'none';
     textarea.style.display = '';
+    textarea.focus();
   }
 };
 
@@ -2852,6 +2992,13 @@ window.openNewModal = () => {
   document.getElementById('new-notes').value = '';
   document.getElementById('new-save-btn').disabled = false;
   document.getElementById('new-save-btn').textContent = '儲存';
+  // Default to edit (raw) mode since a new article starts empty
+  newMdMode = true;
+  document.getElementById('new-md-btn').classList.add('active');
+  const textarea = document.getElementById('new-body');
+  const viewDiv = document.getElementById('new-body-view');
+  textarea.style.display = '';
+  if (viewDiv) viewDiv.style.display = 'none';
   // Default: hide notes pane
   const newNotesPane = document.getElementById('new-notes-pane');
   const newBodyPane = document.getElementById('new-body-pane');
@@ -3204,12 +3351,12 @@ function renderSettingsBody() {
       </div>
     `;
   } else if (currentSettingsTab === 'appearance') {
-    const savedSize = parseInt(localStorage.getItem('reading_font_size') || '16');
+    const savedSize = parseInt(localStorage.getItem('reading_font_size_default') || '16');
     body.innerHTML = `
       <div class="settings-row">
         <label>閱讀字體</label>
         <select onchange="applyDefaultFontSize(parseInt(this.value))">
-          ${[12,13,14,15,16,17,18,20,22,24].map(s=>`<option value="${s}" ${s===savedSize?'selected':''}>${s}px</option>`).join('')}
+          ${[12,14,16,18,20,22,24,26,28,30,32].map(s=>`<option value="${s}" ${s===savedSize?'selected':''}>${s}px</option>`).join('')}
         </select>
       </div>
     `;
