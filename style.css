@@ -189,7 +189,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .folder-tree.move-mode .folder-item:not(.folder-back) { cursor: grab; }
 .folder-tree.move-mode .folder-item.folder-move-target { background: var(--accent-light); outline: 1px dashed var(--accent); }
 
-.folder-tree { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
+.folder-tree { flex: 1; overflow-y: auto; padding: 0 8px 12px; display: flex; flex-direction: column; gap: 1px; }
 .folder-item {
   display: flex; align-items: center; gap: 6px; padding: 6px 8px;
   border-radius: var(--radius); cursor: pointer; font-size: 13px; color: var(--text2);
@@ -1037,3 +1037,4 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   }
   #reading-tap-hint.visible { opacity: 1; }
 }
+
