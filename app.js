@@ -1,7 +1,7 @@
 console.log('[boot] module script started');
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, signInAnonymously, setPersistence, browserLocalPersistence, indexedDBLocalPersistence, browserSessionPersistence, inMemoryPersistence } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, signInAnonymously, browserSessionPersistence, browserLocalPersistence, inMemoryPersistence, setPersistence } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot, query, where, serverTimestamp, waitForPendingWrites } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 console.log('[boot] firebase modules imported');
 
 const firebaseConfig = {
@@ -17,19 +17,6 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
-
-// Incognito mode often blocks/limits IndexedDB, which can cause
-// signInAnonymously() to "succeed" but the session not persist,
-// leaving auth.currentUser as null afterwards. Try IndexedDB ->
-// localStorage -> sessionStorage -> in-memory as a fallback chain.
-window.__authPersistenceReady = (async function setupAuthPersistence() {
-  try {
-    await setPersistence(auth, inMemoryPersistence);
-    console.log('[auth] persistence set: IN_MEMORY (forced)');
-  } catch (e) {
-    console.warn('[auth] inMemoryPersistence failed', e);
-  }
-})();
 
 // DEBUG: expose internals to window for console testing
 window.__debug = { auth, db, getDoc, doc, setDoc, signInAnonymously: null, getAuth, getFirestore, fbApp };
@@ -56,6 +43,7 @@ let saveTimeout = null;
 let selectionRange = null;
 let passcodeTargetUid = null; // uid to load data for when using passcode login
 let batchMode = false;
+let folderMoveMode = false;
 let batchSelected = new Set();
 
 // ── Auth ──
@@ -81,27 +69,34 @@ getRedirectResult(auth).catch(e => {
 
 onAuthStateChanged(auth, user => {
   if (user) {
-    // If this is an anonymous sign-in triggered by passcode, load the target uid's data
+    // Anonymous sign-in triggered by checkPasscode (page reload with saved session)
     if (user.isAnonymous && passcodeTargetUid) {
-      currentUser = { uid: passcodeTargetUid, displayName: '匿名', photoURL: null, isAnonymous: true };
+      const ownerUid = passcodeTargetUid;
+      const anonUid = user.uid;
+      const savedCode = localStorage.getItem('passcode_code');
+      currentUser = { uid: ownerUid, _anonUid: anonUid, displayName: '匿名', photoURL: null, isAnonymous: true };
       document.getElementById('auth-screen').style.display = 'none';
       document.getElementById('app').classList.add('visible');
       document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
-      // Ensure delegate mapping exists for this anon session (handles new anon uid on reload)
-      setDoc(doc(db, 'delegates', user.uid), { ownerUid: passcodeTargetUid, usedPasscode: localStorage.getItem('passcode_code') }).catch(()=>{});
-      subscribeData();
+      // Re-write delegate on reload (in case it was lost). Rules allow create only,
+      // so if it already exists this will fail silently — that is fine.
+      if (savedCode) {
+        setDoc(doc(db, 'delegates', anonUid), { ownerUid, usedPasscode: savedCode }).catch(() => {});
+      }
       passcodeTargetUid = null;
+      subscribeData();
     } else if (!user.isAnonymous) {
       currentUser = user;
       document.getElementById('auth-screen').style.display = 'none';
       document.getElementById('app').classList.add('visible');
       renderUserAvatar();
       subscribeData();
-    }
-    // anonymous user without passcodeTargetUid = stale session, sign out
-    // (but skip if we already have an active passcode-based session)
-    else if (!currentUser) {
-      import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js').then(({signOut: so}) => so(auth));
+    } else if (!currentUser) {
+      // Stale anonymous session — but only sign out if loginWithPasscode is NOT in progress
+      // (loginWithPasscode sets currentUser in Step 6, so during Steps 2-5 currentUser is still null)
+      if (!window._passcodeLoginInProgress) {
+        import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js').then(({signOut: so}) => so(auth));
+      }
     }
   } else {
     currentUser = null;
@@ -130,35 +125,119 @@ window.doSignOut = () => {
 };
 
 // ── Firestore Subscribe ──
+// For anonymous (passcode) users, Firebase Security Rules reject collection-level
+// queries where request.auth.uid != the uid field (even with a delegate mapping),
+// because dynamic get() calls cannot be evaluated at query time.
+// Fix: anonymous sessions subscribe using the real Firebase auth uid (anonUid),
+// but we store ownerUid separately so we can query by it.
+// The query uses ownerUid (= Google user's uid), and rules allow it via delegate.
+// We achieve this by using a two-field approach:
+//   - articles/folders have uid = ownerUid (unchanged)
+//   - anonymous session stores anonUid in currentUser._anonUid
+// For onSnapshot queries: if anonymous, use getDocs + manual polling (since
+// Firebase rules block list queries for delegates at the collection level).
+// Alternatively, we add the anonUid to a "readers" list on each doc — but that
+// requires schema changes. The cleanest no-schema-change fix is to subscribe
+// using the anonUid's auth token but query using ownerUid, which requires a
+// special Firestore rule for list operations.
+//
+// ACTUAL FIX APPLIED: For anonymous users, we use onSnapshot but subscribe
+// as if we are the owner — this works IF the Firestore rules allow list queries
+// for delegates. Since standard Firebase rules don't support dynamic get() in
+// list queries, we instead subscribe with the auth.currentUser.uid (anonUid)
+// but query on the ownerUid field. To make this work, the rules must allow:
+//   allow list: if request.auth != null && (
+//     request.auth.uid == request.query.filters.uid ||
+//     // delegate check is not possible in list rules without custom claims
+//   );
+//
+// BEST COMPATIBLE FIX: store ownerUid as a custom claim OR use the anonUid
+// as the query uid by also writing articles under anonUid. Since we cannot
+// change the schema, we use getDocs (one-time) + re-fetch on focus for anon.
+//
+// IMPLEMENTED: For anon users we use getDocs (no realtime) to avoid the rules
+// list-query limitation, and re-fetch when the window gains focus.
+
+let _unsubArticles = null;
+let _unsubFolders = null;
+
 function subscribeData() {
-  const uid = currentUser.uid;
-  console.log('[subscribeData] subscribing for uid', uid, 'as auth uid', auth.currentUser?.uid);
-  // Articles
-  onSnapshot(query(collection(db, 'articles'), where('uid','==',uid)), snap => {
-    console.log('[subscribeData] articles snapshot, count=', snap.docs.length);
-    articles = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    articles.sort((a,b) => {
-      // pinned > rest (by time)
-      if (a.pinned && !b.pinned) return -1;
-      if (!a.pinned && b.pinned) return 1;
-      return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
+  // Unsubscribe any existing listeners first (prevents duplicate subscriptions)
+  if (_unsubArticles) { _unsubArticles(); _unsubArticles = null; }
+  if (_unsubFolders) { _unsubFolders = null; }
+
+  const ownerUid = currentUser.uid; // The uid that owns the data (Google uid)
+  const anonUid = currentUser._anonUid || null; // Firebase auth uid for anon sessions
+  const isAnon = currentUser.isAnonymous && !!anonUid;
+
+  console.log('[subscribeData] ownerUid=', ownerUid, 'anonUid=', anonUid, 'isAnon=', isAnon);
+
+  if (isAnon) {
+    // Anonymous users: Firebase rules block list queries for delegates because
+    // dynamic get() is not evaluated at query time. Use getDocs (one-time fetch)
+    // which goes through the per-document read rule (delegate check works there).
+    window._fetchAnonData = async function fetchAnonData(retryCount = 0) {
+      try {
+        const [artSnap, folSnap] = await Promise.all([
+          getDocs(query(collection(db, 'articles'), where('uid','==',ownerUid))),
+          getDocs(query(collection(db, 'folders'), where('uid','==',ownerUid)))
+        ]);
+        articles = artSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        articles.sort((a,b) => {
+          if (a.pinned && !b.pinned) return -1;
+          if (!a.pinned && b.pinned) return 1;
+          return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
+        });
+        folders = folSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderTagBar();
+        renderArticleList();
+        renderFolderTree();
+        renderFolderSelects();
+        console.log('[subscribeData/anon] fetched articles=', articles.length, 'folders=', folders.length);
+      } catch(err) {
+        console.error('[subscribeData/anon] fetch error:', err);
+        if (err.code === 'permission-denied' && retryCount < 6) {
+          // delegate doc 可能還沒在 Firestore 生效，等待後重試
+          const delay = (retryCount + 1) * 800;
+          console.log('[subscribeData/anon] retrying in', delay, 'ms... attempt', retryCount + 1);
+          setTimeout(() => window._fetchAnonData(retryCount + 1), delay);
+        } else {
+          showToast('讀取失敗：' + (err.code || err.message));
+        }
+      }
+    }
+    window._fetchAnonData();
+    // Re-fetch on focus so data stays reasonably fresh
+    const onFocus = () => window._fetchAnonData();
+    window.addEventListener('focus', onFocus);
+    // Store unsub as focus listener removal
+    _unsubArticles = () => window.removeEventListener('focus', onFocus);
+  } else {
+    // Google users: use realtime onSnapshot (rules allow since auth.uid == data.uid)
+    _unsubArticles = onSnapshot(query(collection(db, 'articles'), where('uid','==',ownerUid)), snap => {
+      console.log('[subscribeData] articles snapshot, count=', snap.docs.length);
+      articles = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      articles.sort((a,b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        return (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0);
+      });
+      renderTagBar();
+      renderArticleList();
+    }, err => {
+      console.error('[subscribeData] articles error:', err);
+      showToast('讀取文章失敗：' + err.code);
     });
-    renderTagBar();
-    renderArticleList();
-  }, err => {
-    console.error('[subscribeData] articles error:', err);
-    showToast('讀取文章失敗：' + err.code);
-  });
-  // Folders
-  onSnapshot(query(collection(db, 'folders'), where('uid','==',uid)), snap => {
-    console.log('[subscribeData] folders snapshot, count=', snap.docs.length);
-    folders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderFolderTree();
-    renderFolderSelects();
-  }, err => {
-    console.error('[subscribeData] folders error:', err);
-    showToast('讀取資料夾失敗：' + err.code);
-  });
+    _unsubFolders = onSnapshot(query(collection(db, 'folders'), where('uid','==',ownerUid)), snap => {
+      console.log('[subscribeData] folders snapshot, count=', snap.docs.length);
+      folders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderFolderTree();
+      renderFolderSelects();
+    }, err => {
+      console.error('[subscribeData] folders error:', err);
+      showToast('讀取資料夾失敗：' + err.code);
+    });
+  }
 }
 
 // ── Tag bar ──
@@ -255,11 +334,34 @@ function renderFolderTree() {
     const parentId = currentFolderPath.length > 1 ? currentFolderPath[currentFolderPath.length-2].id : null;
     backItem.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg> 上一層`;
     backItem.onclick = () => {
+      if (folderMoveMode) return;
       currentFolderPath.pop();
       currentFolderId = parentId;
       renderFolderTree();
       renderArticleList();
     };
+    // In move mode, dropping a folder here moves it up one level (out of current folder)
+    if (folderMoveMode) {
+      backItem.addEventListener('dragover', e => {
+        if (!e.dataTransfer.types.includes('folderId')) return;
+        e.preventDefault();
+        backItem.classList.add('folder-move-target');
+      });
+      backItem.addEventListener('dragleave', () => backItem.classList.remove('folder-move-target'));
+      backItem.addEventListener('drop', async e => {
+        e.preventDefault();
+        backItem.classList.remove('folder-move-target');
+        const srcFolderId = e.dataTransfer.getData('folderId');
+        if (!srcFolderId) return;
+        const srcFolder = folders.find(f => f.id === srcFolderId);
+        if (!srcFolder) return;
+        const newParentId = parentId; // grandparent of current folder
+        await updateDoc(doc(db, 'folders', srcFolderId), { parentId: newParentId || null });
+        srcFolder.parentId = newParentId || null;
+        renderFolderTree();
+        showToast(`「${srcFolder.name}」已移至上一層`);
+      });
+    }
     tree.appendChild(backItem);
   }
 
@@ -271,13 +373,13 @@ function renderFolderTree() {
     tree.appendChild(crumb);
   }
 
+  tree.classList.toggle('move-mode', folderMoveMode);
+
   // Show children of current folder
   const parentId = (currentFolderId === '__uncat__' || currentFolderId === null) ? null : currentFolderId;
   const children = folders
     .filter(f => (f.parentId||null) === parentId)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-
-  let folderDragSrc = null;
 
   children.forEach((folder, idx) => {
     const count = articles.filter(a => a.folderId === folder.id).length;
@@ -289,84 +391,140 @@ function renderFolderTree() {
     item.dataset.folderIdx = idx;
     item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(folder.name)} <span class="count${isEmpty ? ' empty' : ''}">${count || '—'}</span>`;
     item.onclick = (e) => {
-      if (item.classList.contains('folder-dragging')) return;
+      if (item.classList.contains('folder-dragging') || folderMoveMode) return;
       currentFolderId = folder.id;
       currentFolderPath = [...currentFolderPath, {id: folder.id, name: folder.name}];
       renderFolderTree();
       renderArticleList();
     };
     item.addEventListener('contextmenu', e => openCtxMenu(e, 'folder', folder.id, folder.name));
-    // Drag article onto folder
-    item.addEventListener('dragover', e => {
-      e.preventDefault();
-      const isDraggingFolder = e.dataTransfer.types.includes('folderId');
-      if (!isDraggingFolder) {
-        item.classList.add('drag-over');
-      } else {
+
+    if (folderMoveMode) {
+      // ── Move mode: dragging a folder onto another folder nests it inside ──
+      item.addEventListener('dragover', e => {
+        if (!e.dataTransfer.types.includes('folderId')) return;
+        e.preventDefault();
+        item.classList.add('folder-move-target');
+      });
+      item.addEventListener('dragleave', () => item.classList.remove('folder-move-target'));
+      item.addEventListener('drop', async e => {
+        e.preventDefault();
+        item.classList.remove('folder-move-target');
+        const srcFolderId = e.dataTransfer.getData('folderId');
+        if (!srcFolderId || srcFolderId === folder.id) return;
+        const srcFolder = folders.find(f => f.id === srcFolderId);
+        if (!srcFolder) return;
+        // prevent moving a folder into its own descendant
+        let p = folder.id;
+        const visited = new Set();
+        while (p) {
+          if (p === srcFolderId) { showToast('不能移到自己的子資料夾中'); return; }
+          if (visited.has(p)) break;
+          visited.add(p);
+          const pf = folders.find(f => f.id === p);
+          p = pf ? (pf.parentId || null) : null;
+        }
+        await updateDoc(doc(db, 'folders', srcFolderId), { parentId: folder.id });
+        srcFolder.parentId = folder.id;
+        renderFolderTree();
+        showToast(`已移入「${folder.name}」`);
+      });
+      // Article drop still allowed onto folders even in move mode
+      item.addEventListener('dragover', e => {
+        if (e.dataTransfer.types.includes('articleId')) { e.preventDefault(); item.classList.add('drag-over'); }
+      });
+      item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+      item.addEventListener('drop', async e => {
+        const artId = e.dataTransfer.getData('articleId');
+        if (!artId) return;
+        e.preventDefault();
         item.classList.remove('drag-over');
-        // Show reorder hint
-        const rect = item.getBoundingClientRect();
-        const mid = rect.top + rect.height / 2;
-        item.classList.remove('folder-drop-above', 'folder-drop-below');
-        if (e.clientY < mid) item.classList.add('folder-drop-above');
-        else item.classList.add('folder-drop-below');
-      }
-    });
-    item.addEventListener('dragleave', (e) => {
-      item.classList.remove('drag-over', 'folder-drop-above', 'folder-drop-below');
-    });
-    item.addEventListener('drop', async e => {
-      e.preventDefault();
-      item.classList.remove('drag-over', 'folder-drop-above', 'folder-drop-below');
-      const artId = e.dataTransfer.getData('articleId');
-      const srcFolderId = e.dataTransfer.getData('folderId');
-      if (artId) {
         await updateDoc(doc(db, 'articles', artId), { folderId: folder.id });
         showToast(`已移到「${folder.name}」`);
         const art = articles.find(a => a.id === artId);
         if (art) art.folderId = folder.id;
         renderFolderTree();
-      } else if (srcFolderId && srcFolderId !== folder.id) {
-        // Reorder: determine above or below
-        const rect = item.getBoundingClientRect();
-        const insertAbove = e.clientY < rect.top + rect.height / 2;
-        const srcFolder = folders.find(f => f.id === srcFolderId);
-        const targetFolder = folder;
-        if (!srcFolder) return;
-        // Re-sort siblings excluding src
-        const sibs = folders
-          .filter(f => (f.parentId||null) === parentId && f.id !== srcFolderId)
-          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        const targetIdx = sibs.findIndex(f => f.id === targetFolder.id);
-        const insertIdx = insertAbove ? targetIdx : targetIdx + 1;
-        sibs.splice(insertIdx, 0, srcFolder);
-        // Save new orders
-        const updates = sibs.map((f, i) => updateDoc(doc(db, 'folders', f.id), { order: i }));
-        await Promise.all(updates);
-        // Update local state
-        sibs.forEach((f, i) => { const lf = folders.find(x => x.id === f.id); if (lf) lf.order = i; });
-        renderFolderTree();
-        showToast('資料夾已排序');
-      }
-    });
-    // Folder drag-to-reorder events
+      });
+    } else {
+      // ── Normal mode: drag article onto folder OR drag folder to reorder (no nesting) ──
+      item.addEventListener('dragover', e => {
+        e.preventDefault();
+        const isDraggingFolder = e.dataTransfer.types.includes('folderId');
+        if (!isDraggingFolder) {
+          item.classList.add('drag-over');
+        } else {
+          item.classList.remove('drag-over');
+          // Show reorder line based on cursor position relative to target
+          const rect = item.getBoundingClientRect();
+          const mid = rect.top + rect.height / 2;
+          item.classList.remove('folder-drop-above', 'folder-drop-below');
+          if (e.clientY < mid) item.classList.add('folder-drop-above');
+          else item.classList.add('folder-drop-below');
+        }
+      });
+      item.addEventListener('dragleave', (e) => {
+        item.classList.remove('drag-over', 'folder-drop-above', 'folder-drop-below');
+      });
+      item.addEventListener('drop', async e => {
+        e.preventDefault();
+        item.classList.remove('drag-over', 'folder-drop-above', 'folder-drop-below');
+        const artId = e.dataTransfer.getData('articleId');
+        const srcFolderId = e.dataTransfer.getData('folderId');
+        if (artId) {
+          await updateDoc(doc(db, 'articles', artId), { folderId: folder.id });
+          showToast(`已移到「${folder.name}」`);
+          const art = articles.find(a => a.id === artId);
+          if (art) art.folderId = folder.id;
+          renderFolderTree();
+        } else if (srcFolderId && srcFolderId !== folder.id) {
+          // Pure reorder among siblings: insert above or below target
+          const rect = item.getBoundingClientRect();
+          const insertAbove = e.clientY < rect.top + rect.height / 2;
+          const srcFolder = folders.find(f => f.id === srcFolderId);
+          const targetFolder = folder;
+          if (!srcFolder) return;
+          // Only reorder if same parent (move mode handles cross-folder moves)
+          if ((srcFolder.parentId||null) !== parentId) {
+            showToast('請使用移動模式跨資料夾移動');
+            return;
+          }
+          const sibs = folders
+            .filter(f => (f.parentId||null) === parentId && f.id !== srcFolderId)
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          const targetIdx = sibs.findIndex(f => f.id === targetFolder.id);
+          const insertIdx = insertAbove ? targetIdx : targetIdx + 1;
+          sibs.splice(insertIdx, 0, srcFolder);
+          const updates = sibs.map((f, i) => updateDoc(doc(db, 'folders', f.id), { order: i }));
+          await Promise.all(updates);
+          sibs.forEach((f, i) => { const lf = folders.find(x => x.id === f.id); if (lf) lf.order = i; });
+          renderFolderTree();
+          showToast('資料夾已排序');
+        }
+      });
+    }
+
+    // Folder drag-to-reorder/move events (common to both modes)
     item.addEventListener('dragstart', e => {
       // Only initiate folder drag if not dragging an article row
       e.stopPropagation();
-      folderDragSrc = folder.id;
       e.dataTransfer.setData('folderId', folder.id);
       e.dataTransfer.effectAllowed = 'move';
       setTimeout(() => item.classList.add('folder-dragging'), 0);
     });
     item.addEventListener('dragend', () => {
-      item.classList.remove('folder-dragging', 'folder-drop-above', 'folder-drop-below');
-      folderDragSrc = null;
+      item.classList.remove('folder-dragging', 'folder-drop-above', 'folder-drop-below', 'folder-move-target');
       // Clean up all siblings
-      tree.querySelectorAll('.folder-item').forEach(el => el.classList.remove('folder-drop-above', 'folder-drop-below'));
+      tree.querySelectorAll('.folder-item').forEach(el => el.classList.remove('folder-drop-above', 'folder-drop-below', 'folder-move-target', 'drag-over'));
     });
     tree.appendChild(item);
   });
 }
+
+window.toggleFolderMoveMode = () => {
+  folderMoveMode = !folderMoveMode;
+  document.getElementById('folder-move-toggle').classList.toggle('active', folderMoveMode);
+  renderFolderTree();
+};
 
 function renderFolderSelects() {
   // For new article modal
@@ -663,6 +821,7 @@ window.openReading = (id) => {
   if (!art) return;
   currentArticleId = id;
   mdMode = false;
+  resetReadingFontSizeToDefault();
   highlightMode = false;
   highlightState = 'off';
   pendingHighlightText = '';
@@ -771,6 +930,44 @@ function renderMarkdown(text) {
     let line = lines[i];
     if (line.startsWith('\x60\x60\x60')) { inPre = !inPre; result += inPre ? '<pre><code>' : '</code></pre>\n'; continue; }
     if (inPre) { result += escHtml(line) + '\n'; continue; }
+    // table: header row followed by separator row (---|---)
+    if (/^\s*\|?.+\|.+\|?\s*$/.test(line) && i+1 < lines.length && /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(lines[i+1])) {
+      const splitRow = (row) => {
+        let r = row.trim();
+        if (r.startsWith('|')) r = r.slice(1);
+        if (r.endsWith('|')) r = r.slice(0, -1);
+        return r.split('|').map(c => c.trim());
+      };
+      const headerCells = splitRow(line);
+      const aligns = splitRow(lines[i+1]).map(c => {
+        const left = c.startsWith(':'), right = c.endsWith(':');
+        if (left && right) return 'center';
+        if (right) return 'right';
+        if (left) return 'left';
+        return '';
+      });
+      let tbl = '<table class="md-table"><thead><tr>';
+      headerCells.forEach((c, idx) => {
+        const style = aligns[idx] ? ` style="text-align:${aligns[idx]}"` : '';
+        tbl += `<th${style}>${inlineMarkdown(c)}</th>`;
+      });
+      tbl += '</tr></thead><tbody>';
+      let j = i + 2;
+      while (j < lines.length && /\|/.test(lines[j]) && lines[j].trim() !== '') {
+        const cells = splitRow(lines[j]);
+        tbl += '<tr>';
+        cells.forEach((c, idx) => {
+          const style = aligns[idx] ? ` style="text-align:${aligns[idx]}"` : '';
+          tbl += `<td${style}>${inlineMarkdown(c)}</td>`;
+        });
+        tbl += '</tr>';
+        j++;
+      }
+      tbl += '</tbody></table>\n';
+      result += tbl;
+      i = j - 1;
+      continue;
+    }
     // headings
     if (/^### /.test(line)) { result += '<h3>' + inlineMarkdown(line.slice(4)) + '</h3>\n'; continue; }
     if (/^## /.test(line)) { result += '<h2>' + inlineMarkdown(line.slice(3)) + '</h2>\n'; continue; }
@@ -804,11 +1001,6 @@ function renderBodyPane(art) {
   const pane = document.getElementById('reading-body-content');
   if (mdMode) {
     pane.innerHTML = `<textarea class="art-body-editor" id="body-editor" oninput="scheduleFieldSave('body', this.value)">${escHtml(art.body||'')}</textarea>`;
-    // Auto-height
-    setTimeout(() => {
-      const ta = document.getElementById('body-editor');
-      if (ta) { ta.style.height = 'auto'; ta.style.height = Math.max(200, ta.scrollHeight) + 'px'; ta.style.minHeight = 'unset'; }
-    }, 10);
   } else {
     let html = renderMarkdown(art.body||'');
     if (art.highlight) {
@@ -847,17 +1039,11 @@ window.autoResizeTitle = (el) => {
   el.style.height = el.scrollHeight + 'px';
 };
 
-// Resize new-article body without scrolling the pane to top
-window.autoResizeNewBody = (el) => {
-  const pane = document.getElementById('new-body-pane');
-  const scrollTop = pane ? pane.scrollTop : 0;
-  el.style.height = 'auto';
-  el.style.height = Math.max(300, el.scrollHeight) + 'px';
-  if (pane) pane.scrollTop = scrollTop;
-};
-
 // ── Reading font size ──
-let readingFontSize = parseInt(localStorage.getItem('reading_font_size') || '16');
+// `reading_font_size_default` is the persisted setting (Settings > 外觀).
+// `readingFontSize` is the active session value; +/- adjustments are temporary
+// and reset to the saved default each time an article is opened.
+let readingFontSize = parseInt(localStorage.getItem('reading_font_size_default') || '16');
 function applyReadingFontSize() {
   document.documentElement.style.setProperty('--reading-font-size', readingFontSize + 'px');
   const lbl = document.getElementById('reading-font-size-label');
@@ -865,14 +1051,20 @@ function applyReadingFontSize() {
 }
 applyReadingFontSize();
 window.changeFontSize = (delta) => {
-  readingFontSize = Math.min(26, Math.max(12, readingFontSize + delta));
-  localStorage.setItem('reading_font_size', readingFontSize);
+  // Temporary, session-only adjustment — not saved.
+  readingFontSize = Math.min(32, Math.max(12, readingFontSize + delta));
+  applyReadingFontSize();
+};
+
+window.resetReadingFontSizeToDefault = () => {
+  readingFontSize = parseInt(localStorage.getItem('reading_font_size_default') || '16');
   applyReadingFontSize();
 };
 
 window.applyDefaultFontSize = (size) => {
-  readingFontSize = Math.min(26, Math.max(12, size));
-  localStorage.setItem('reading_font_size', readingFontSize);
+  const s = Math.min(32, Math.max(12, size));
+  localStorage.setItem('reading_font_size_default', s);
+  readingFontSize = s;
   applyReadingFontSize();
   showToast('預設字體大小已更新');
 };
@@ -949,7 +1141,8 @@ window.toggleNewMd = () => {
   const pane = document.getElementById('new-body-pane');
   const textarea = document.getElementById('new-body');
   const viewDiv = document.getElementById('new-body-view');
-  if (newMdMode) {
+  if (!newMdMode) {
+    // switching to view (rendered) mode
     if (!viewDiv) {
       const div = document.createElement('div');
       div.id = 'new-body-view';
@@ -961,9 +1154,11 @@ window.toggleNewMd = () => {
     vd.style.display = 'block';
     textarea.style.display = 'none';
   } else {
+    // switching to edit (raw) mode
     const vd = document.getElementById('new-body-view');
     if (vd) vd.style.display = 'none';
     textarea.style.display = '';
+    textarea.focus();
   }
 };
 
@@ -1347,6 +1542,7 @@ window.deleteCurrentArticle = async () => {
   await deleteDoc(doc(db, 'articles', currentArticleId));
   closeReading();
   showToast('已刪除');
+  if (currentUser?.isAnonymous && window._fetchAnonData) window._fetchAnonData();
 };
 
 // ── New article modal ──
@@ -1362,6 +1558,13 @@ window.openNewModal = () => {
   document.getElementById('new-notes').value = '';
   document.getElementById('new-save-btn').disabled = false;
   document.getElementById('new-save-btn').textContent = '儲存';
+  // Default to edit (raw) mode since a new article starts empty
+  newMdMode = true;
+  document.getElementById('new-md-btn').classList.add('active');
+  const textarea = document.getElementById('new-body');
+  const viewDiv = document.getElementById('new-body-view');
+  textarea.style.display = '';
+  if (viewDiv) viewDiv.style.display = 'none';
   // Default: hide notes pane
   const newNotesPane = document.getElementById('new-notes-pane');
   const newBodyPane = document.getElementById('new-body-pane');
@@ -1482,6 +1685,7 @@ window.saveNewArticle = async () => {
     });
     closeNewModal();
     showToast('文章已儲存 ✓');
+    if (currentUser?.isAnonymous && window._fetchAnonData) window._fetchAnonData();
     // Auto-open the article
     setTimeout(() => openReading(docRef.id), 300);
   } catch(e) {
@@ -1511,6 +1715,7 @@ window.saveFolderModal = async () => {
   await addDoc(collection(db, 'folders'), { uid: currentUser.uid, name, parentId, order: maxOrder + 1 });
   closeFolderModal();
   showToast(`資料夾「${name}」已建立`);
+  if (currentUser?.isAnonymous && window._fetchAnonData) window._fetchAnonData();
 };
 
 // ── Search ──
@@ -1712,12 +1917,12 @@ function renderSettingsBody() {
       </div>
     `;
   } else if (currentSettingsTab === 'appearance') {
-    const savedSize = parseInt(localStorage.getItem('reading_font_size') || '16');
+    const savedSize = parseInt(localStorage.getItem('reading_font_size_default') || '16');
     body.innerHTML = `
       <div class="settings-row">
         <label>閱讀字體</label>
         <select onchange="applyDefaultFontSize(parseInt(this.value))">
-          ${[12,13,14,15,16,17,18,20,22,24].map(s=>`<option value="${s}" ${s===savedSize?'selected':''}>${s}px</option>`).join('')}
+          ${[12,14,16,18,20,22,24,26,28,30,32].map(s=>`<option value="${s}" ${s===savedSize?'selected':''}>${s}px</option>`).join('')}
         </select>
       </div>
     `;
@@ -1736,7 +1941,7 @@ function renderSettingsBody() {
       </div>` : ''}
       <div class="settings-row" style="margin-top:4px">
         <label></label>
-        <button class="btn btn-danger" onclick="doSignOut()">登出</button>
+        <button class="btn btn-danger" onclick="if(confirm('確定登出？'))signOut(auth)">登出</button>
       </div>
     `;
   }
@@ -1744,18 +1949,19 @@ function renderSettingsBody() {
 
 // ── Passcode ──
 window.generatePasscode = async () => {
-  if (!currentUser || !currentUser.uid) { showToast('尚未登入'); return; }
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  const expires = Date.now() + 2 * 60 * 1000;
   try {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = Date.now() + 10 * 60 * 1000; // 10 分鐘有效
     await setDoc(doc(db, 'passcodes', code), {
-      ownerUid: currentUser.uid, expires, used: false, createdAt: serverTimestamp()
+      ownerUid: currentUser.uid,
+      uid: currentUser.uid,
+      expires,
+      used: false
     });
     document.getElementById('passcode-code').textContent = code;
     document.getElementById('passcode-modal').classList.add('open');
     document.getElementById('settings-modal').classList.remove('open');
-  } catch (e) {
-    console.error('[generatePasscode] failed:', e);
+  } catch(e) {
     showToast('產生驗證碼失敗：' + e.message);
   }
 };
@@ -1767,100 +1973,111 @@ window.copyPasscode = () => {
 
 console.log('[boot] defining loginWithPasscode');
 window.loginWithPasscode = async () => {
-  console.log('[LP] start');
   const code = document.getElementById('passcode-input').value.trim();
-  console.log('[LP] code=', code, 'len=', code.length);
-  if (code.length !== 6) { showToast('請輸入6位驗證碼'); return; }
+  if (code.length !== 6) { showToast('請輸入驗證碼'); return; }
   const btn = document.querySelector('#auth-screen .btn-primary');
   if (btn) { btn.disabled = true; btn.textContent = '驗證中…'; }
+  window._passcodeLoginInProgress = true;
   try {
-    await window.__authPersistenceReady;
-    // Step 1: read passcode (rules allow public read)
-    console.log('[LP] step1: getDoc passcode...');
+    // Step 1: 讀取 passcode doc
     const snap = await getDoc(doc(db, 'passcodes', code));
-    console.log('[LP] step1 done, exists=', snap.exists());
     if (!snap.exists()) { showToast('驗證碼無效'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     const data = snap.data();
-    console.log('[LP] data=', data);
-    if (Date.now() > data.expires) { showToast('驗證碼已過期'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
+    const ownerUid = data.ownerUid || data.uid;
+    if (!ownerUid) { showToast('驗證碼格式錯誤'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
+    if (Date.now() > Number(data.expires)) { showToast('驗證碼已過期'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
     if (data.used) { showToast('驗證碼已使用過'); if (btn) { btn.disabled=false; btn.textContent='匿名登入'; } return; }
-    console.log('[LP] passed expiry/used checks');
-    // Step 2: sign in anonymously to get a real Firebase Auth token
-    console.log('[LP] step2: calling signInAnonymously...');
+    console.log('[LP] passcode ok, ownerUid=', ownerUid);
+
+    // Step 2: 匿名登入 — 用 sessionStorage 確保 auth 在頁面生命週期內持久
+    await setPersistence(auth, browserSessionPersistence);
     const anonCred = await Promise.race([
       signInAnonymously(auth),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('登入逾時，請檢查網路或匿名登入是否已啟用')), 10000))
+      new Promise((_, rej) => setTimeout(() => rej(new Error('登入逾時')), 15000))
     ]);
     const anonUid = anonCred.user.uid;
-    console.log('[LP] step2 done, anonUid=', anonUid);
-    // Wait for the auth state change + ID token to be ready before issuing
-    // Firestore writes. signInAnonymously can resolve before auth.currentUser
-    // is fully settled, causing Firestore writes to hang indefinitely.
-    await new Promise((resolve) => {
-      if (auth.currentUser && auth.currentUser.uid === anonUid) {
-        auth.currentUser.getIdToken().then(() => resolve());
-        return;
-      }
-      const unsub = onAuthStateChanged(auth, (u) => {
-        if (u && u.uid === anonUid) {
-          unsub();
-          u.getIdToken().then(() => resolve());
-        }
+    const anonUser = anonCred.user;
+    console.log('[LP] anonUid=', anonUid);
+
+    // Step 3: 等 onAuthStateChanged 確認 auth.currentUser 更新
+    if (auth.currentUser?.uid !== anonUid) {
+      await new Promise((resolve) => {
+        const unsub = onAuthStateChanged(auth, (u) => {
+          if (u?.uid === anonUid) { unsub(); resolve(); }
+        });
       });
-    });
-    console.log('[LP] auth ready, currentUser=', auth.currentUser?.uid);
-    if (!auth.currentUser || auth.currentUser.uid !== anonUid) {
-      throw new Error('登入後驗證狀態遺失，請確認瀏覽器未封鎖儲存空間（無痕模式部分設定可能導致此問題）');
     }
-    // Step 3: write delegate mapping so Firestore rules permit cross-uid reads.
-    // Best-effort: don't let a rules/permission issue here block the login flow.
-    console.log('[LP] step3: writing delegate doc...');
-    try {
-      await Promise.race([
-        setDoc(doc(db, 'delegates', anonUid), { ownerUid: data.ownerUid, usedPasscode: code }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('delegate write timeout')), 8000))
-      ]);
-      console.log('[passcode] delegate written:', anonUid, '->', data.ownerUid);
-    } catch (e2) {
-      console.error('[passcode] delegate write failed', e2);
+    console.log('[LP] auth.currentUser=', auth.currentUser?.uid);
+
+    // Step 4: 強制刷新 token 確保 Firestore SDK 同步新的 auth 狀態
+    await auth.currentUser.getIdToken(true);
+    console.log('[LP] token refreshed');
+
+    // Step 4: 寫入 delegate doc，失敗就重試（auth token 需要時間在 Firestore 生效）
+    let delegateWritten = false;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        await setDoc(doc(db, 'delegates', anonUid), { ownerUid, usedPasscode: code });
+        console.log('[LP] delegate written on attempt', attempt);
+        delegateWritten = true;
+        break;
+      } catch (e2) {
+        console.warn('[LP] delegate write attempt', attempt, 'failed:', e2?.code);
+        if (attempt < 5) {
+          await new Promise(r => setTimeout(r, attempt * 500));
+        }
+      }
     }
-    // Step 3b: mark passcode as used (best-effort, single-use enforcement)
-    console.log('[LP] step3b: marking passcode used...');
+    if (!delegateWritten) {
+      showToast('登入失敗：無法建立授權，請重試');
+      if (btn) { btn.disabled=false; btn.textContent='匿名登入'; }
+      return;
+    }
+
+    // Step 5: 標記 passcode 已使用
     try {
-      await Promise.race([
-        setDoc(doc(db, 'passcodes', code), { used: true, anonUid }, { merge: true }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('mark-used timeout')), 8000))
-      ]);
-      console.log('[LP] step3b done');
+      await setDoc(doc(db, 'passcodes', code), { used: true }, { merge: true });
+      console.log('[LP] passcode marked used');
     } catch (e3) {
-      console.warn('passcode mark-used failed', e3);
+      console.warn('[LP] mark used failed (non-critical):', e3.message);
     }
-    // Step 4: store locally
-    console.log('[LP] step4: finalizing session...');
-    localStorage.setItem('passcode_uid', data.ownerUid);
+
+    // Step 6: 進入 app
+    localStorage.setItem('passcode_uid', ownerUid);
     localStorage.setItem('passcode_code', code);
     localStorage.setItem('passcode_expires', data.expires);
     showToast('驗證成功，載入中…');
-    // Manually trigger session setup: onAuthStateChanged may NOT fire again
-    // if this browser was already signed in anonymously (signInAnonymously
-    // resolves with the existing user without a state change in that case).
-    currentUser = { uid: data.ownerUid, displayName: '匿名', photoURL: null, isAnonymous: true };
+    currentUser = { uid: ownerUid, _anonUid: anonUid, displayName: '匿名', photoURL: null, isAnonymous: true };
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app').classList.add('visible');
     document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
     passcodeTargetUid = null;
-    console.log('[LP] step5: subscribeData...');
+    window._passcodeLoginInProgress = false;
+    // 確認 delegate doc 可讀（代表已寫入並生效）再讀取資料
+    let delegateReady = false;
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      try {
+        const delSnap = await getDoc(doc(db, 'delegates', anonUid));
+        if (delSnap.exists()) { delegateReady = true; break; }
+      } catch(e) { /* 還沒就緒，繼續等 */ }
+    }
+    console.log('[LP] delegate ready=', delegateReady);
     subscribeData();
     console.log('[LP] ALL DONE');
   } catch(e) {
     console.error('[LP] CAUGHT ERROR:', e);
     showToast('登入失敗：' + e.message);
     if (btn) { btn.disabled = false; btn.textContent = '匿名登入'; }
+  } finally {
+    window._passcodeLoginInProgress = false;
   }
 };
 
-function loadAnonymousData(uid) {
-  currentUser = { uid, displayName: '匿名', photoURL: null, isAnonymous: true };
+
+function loadAnonymousData(uid, anonUid) {
+  // anonUid = Firebase Auth uid of the anonymous session (may differ from ownerUid)
+  currentUser = { uid, _anonUid: anonUid || null, displayName: '匿名', photoURL: null, isAnonymous: true };
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app').classList.add('visible');
   document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
@@ -2002,6 +2219,7 @@ window.deleteCtxTarget = async () => {
     .map(a => updateDoc(doc(db, 'articles', a.id), { folderId: null }));
   await Promise.all(moveUpdates);
   await deleteDoc(doc(db, 'folders', ctxTarget.id));
+  if (currentUser?.isAnonymous && window._fetchAnonData) window._fetchAnonData();
   if (currentFolderId === ctxTarget.id) { currentFolderId = null; currentFolderPath = []; }
   ctxTarget = null;
   showToast('資料夾已刪除');
