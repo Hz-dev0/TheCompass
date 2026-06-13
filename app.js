@@ -389,7 +389,7 @@ function renderFolderTree() {
     item.draggable = true;
     item.dataset.folderId = folder.id;
     item.dataset.folderIdx = idx;
-    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(folder.name)} <span class="count${isEmpty ? ' empty' : ''}">${count || '—'}</span>`;
+    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(folder.name)} <span class="count${isEmpty ? ' empty' : ''}">${count}</span>`;
     item.onclick = (e) => {
       if (item.classList.contains('folder-dragging') || folderMoveMode) return;
       currentFolderId = folder.id;
