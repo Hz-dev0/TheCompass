@@ -343,7 +343,7 @@ function renderFolderTree() {
     // In move mode, dropping a folder here moves it up one level (out of current folder)
     if (folderMoveMode) {
       backItem.addEventListener('dragover', e => {
-        if (!e.dataTransfer.types.includes('folderId')) return;
+        if (!e.dataTransfer.types.includes('folderid')) return;
         e.preventDefault();
         backItem.classList.add('folder-move-target');
       });
@@ -389,7 +389,7 @@ function renderFolderTree() {
     item.draggable = true;
     item.dataset.folderId = folder.id;
     item.dataset.folderIdx = idx;
-    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(folder.name)} <span class="count${isEmpty ? ' empty' : ''}">${count}</span>`;
+    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(folder.name)}${isEmpty ? '' : ` <span class="count">${count}</span>`}`;
     item.onclick = (e) => {
       if (item.classList.contains('folder-dragging') || folderMoveMode) return;
       currentFolderId = folder.id;
@@ -402,7 +402,7 @@ function renderFolderTree() {
     if (folderMoveMode) {
       // ── Move mode: dragging a folder onto another folder nests it inside ──
       item.addEventListener('dragover', e => {
-        if (!e.dataTransfer.types.includes('folderId')) return;
+        if (!e.dataTransfer.types.includes('folderid')) return;
         e.preventDefault();
         item.classList.add('folder-move-target');
       });
@@ -431,7 +431,7 @@ function renderFolderTree() {
       });
       // Article drop still allowed onto folders even in move mode
       item.addEventListener('dragover', e => {
-        if (e.dataTransfer.types.includes('articleId')) { e.preventDefault(); item.classList.add('drag-over'); }
+        if (e.dataTransfer.types.includes('articleid')) { e.preventDefault(); item.classList.add('drag-over'); }
       });
       item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
       item.addEventListener('drop', async e => {
@@ -449,7 +449,7 @@ function renderFolderTree() {
       // ── Normal mode: drag article onto folder OR drag folder to reorder (no nesting) ──
       item.addEventListener('dragover', e => {
         e.preventDefault();
-        const isDraggingFolder = e.dataTransfer.types.includes('folderId');
+        const isDraggingFolder = e.dataTransfer.types.includes('folderid');
         if (!isDraggingFolder) {
           item.classList.add('drag-over');
         } else {
