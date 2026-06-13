@@ -221,8 +221,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 
 /* ── Font size float ── */
 #reading-font-controls {
-  position: sticky; bottom: 18px;
-  float: right; clear: both;
+  position: absolute; bottom: 18px; right: 18px;
   z-index: 20;
   display: flex; align-items: center; gap: 2px;
   background: rgba(255,255,255,0.88); backdrop-filter: blur(10px);
@@ -230,7 +229,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
   padding: 3px 6px; box-shadow: var(--shadow);
   opacity: 0; transition: opacity 0.2s;
   pointer-events: none;
-  margin-right: -8px;
+  width: max-content;
 }
 #reading-body-pane:hover #reading-font-controls,
 #reading-font-controls:hover { opacity: 1; pointer-events: auto; }
@@ -654,7 +653,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 /* Article body */
 .art-body-rendered {
   font-family: var(--font-serif); font-size: var(--reading-font-size, 16px); line-height: 1.95;
-  color: var(--text); word-break: break-word; max-width: 65ch; margin: 0 auto;
+  color: var(--text); word-break: break-word;
   width: 100%;
 }
 .art-body-rendered mark {
@@ -877,7 +876,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 .art-body-viewonly {
   font-family: var(--font-serif); font-size: 16px; line-height: 1.95;
   color: var(--text); white-space: pre-wrap; word-break: break-word;
-  min-height: 100px; max-width: 65ch; margin: 0 auto;
+  min-height: 100px; width: 100%;
 }
 .art-body-viewonly mark {
   background: var(--highlight-bg); border-bottom: 2px solid var(--highlight-border);
