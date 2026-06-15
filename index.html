@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>收集冊</title>
+
+<!-- PWA -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="收集冊">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500&family=Noto+Sans+TC:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -386,6 +395,62 @@
 
 <!-- Highlight mode indicator -->
 <div id="highlight-mode-banner" style="position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:800;background:var(--accent);color:#fff;padding:4px 16px;border-radius:0 0 8px 8px;font-size:12px;display:none;pointer-events:none">🪄 Highlight 模式 — 在文章中選取文字，確認後標記黃底</div>
+
+<!-- PWA Service Worker 註冊 -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      console.log('[PWA] SW registered:', reg.scope);
+
+      // 偵測到新版 SW 等待中 → 顯示更新提示
+      const showUpdateBanner = () => {
+        const banner = document.createElement('div');
+        banner.id = 'pwa-update-banner';
+        banner.innerHTML = `
+          <span>🆕 新版本已就緒</span>
+          <button onclick="
+            navigator.serviceWorker.controller?.postMessage('SKIP_WAITING');
+            window.location.reload();
+          ">立即更新</button>
+        `;
+        Object.assign(banner.style, {
+          position:'fixed', bottom:'20px', left:'50%',
+          transform:'translateX(-50%)',
+          background:'#4F6EF7', color:'#fff',
+          padding:'10px 18px', borderRadius:'12px',
+          display:'flex', alignItems:'center', gap:'12px',
+          zIndex:'9999', boxShadow:'0 4px 20px rgba(0,0,0,.25)',
+          fontSize:'14px', fontFamily:'sans-serif'
+        });
+        banner.querySelector('button').style.cssText =
+          'background:#fff;color:#4F6EF7;border:none;border-radius:8px;padding:4px 12px;cursor:pointer;font-weight:600;font-size:13px';
+        document.body.appendChild(banner);
+      };
+
+      if (reg.waiting) showUpdateBanner();
+
+      reg.addEventListener('updatefound', () => {
+        const newSW = reg.installing;
+        newSW.addEventListener('statechange', () => {
+          if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+            showUpdateBanner();
+          }
+        });
+      });
+
+      // SW 更新後自動 reload
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) { refreshing = true; window.location.reload(); }
+      });
+    } catch (err) {
+      console.error('[PWA] SW registration failed:', err);
+    }
+  });
+}
+</script>
 
 <!-- Firebase + App Script -->
 <script>
