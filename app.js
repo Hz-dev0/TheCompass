@@ -1330,65 +1330,54 @@ window.togglePin = async () => {
 };
 
 // ── TTS ──
-function _buildTTSVoiceOptions(lang) {
-  const allVoices = speechSynthesis.getVoices();
-  let voices;
-  if (lang.startsWith('en')) {
-    voices = allVoices.filter(v => v.lang.startsWith('en-US') || v.lang.startsWith('en-GB'));
-  } else {
-    voices = allVoices.filter(v =>
-      (v.lang.startsWith('zh-TW') || v.lang.startsWith('zh-CN') || v.lang.startsWith('cmn'))
-      && !v.lang.includes('HK') && !v.name.toLowerCase().includes('cantonese') && !v.name.toLowerCase().includes('粵'));
-  }
-  return voices;
-}
+// 三個固定人聲選項
+const TTS_VOICES = [
+  { label: '台灣中文', name: 'Google 國語（台灣）', lang: 'zh-TW' },
+  { label: '中國大陸', name: 'Google 普通話（中國大陸）', lang: 'zh-CN' },
+  { label: 'English',  name: 'Google US English',          lang: 'en-US' },
+];
 
 window.openTTSMenu = (e) => {
   e.preventDefault();
   const menu = document.getElementById('tts-menu');
-  const lang = localStorage.getItem('tts_lang') || 'zh-TW';
-  const savedVoice = localStorage.getItem('tts_voice') || '';
+  const savedVoice = localStorage.getItem('tts_voice') || TTS_VOICES[0].name;
   const rate = parseFloat(localStorage.getItem('tts_rate') || '1');
 
-  // Language pills
-  const langDiv = document.getElementById('tts-menu-lang');
-  langDiv.innerHTML = '';
-  [['zh-TW','中文'],['en-US','EN (US)'],['en-GB','EN (GB)']].forEach(([val, label]) => {
+  // Voice pills
+  const pillsDiv = document.getElementById('tts-voice-pills');
+  pillsDiv.innerHTML = '';
+  const allVoices = speechSynthesis.getVoices();
+  TTS_VOICES.forEach(({ label, name, lang }) => {
+    const available = allVoices.some(v => v.name === name);
+    const active = savedVoice === name;
     const btn = document.createElement('button');
-    btn.textContent = label;
-    btn.style.cssText = `flex:1;padding:4px 0;font-size:11px;border-radius:var(--radius);cursor:pointer;border:1px solid ${val===lang?'var(--accent)':'var(--border2)'};background:${val===lang?'var(--accent-light)':'transparent'};color:${val===lang?'var(--accent)':'var(--text2)'};font-family:var(--font-sans)`;
+    btn.textContent = label + (available ? '' : ' (不支援)');
+    btn.disabled = !available;
+    btn.dataset.voiceName = name;
+    btn.style.cssText = `width:100%;padding:6px 10px;text-align:left;font-size:12px;border-radius:var(--radius);cursor:${available?'pointer':'default'};border:1px solid ${active?'var(--accent)':'var(--border2)'};background:${active?'var(--accent-light)':'transparent'};color:${active?'var(--accent)':available?'var(--text2)':'var(--text3)'};font-family:var(--font-sans);opacity:${available?1:0.5}`;
     btn.onclick = () => {
-      localStorage.setItem('tts_lang', val);
-      localStorage.removeItem('tts_voice');
-      // Rebuild voice list for new lang
-      const voices = _buildTTSVoiceOptions(val);
-      const sel = document.getElementById('tts-menu-voice');
-      sel.innerHTML = '<option value="">系統預設</option>' + voices.map(v=>`<option value="${v.name}">${v.name}</option>`).join('');
-      // Rebuild pills
-      langDiv.querySelectorAll('button').forEach((b,i) => {
-        const v2 = [['zh-TW'],['en-US'],['en-GB']][i][0];
-        const active = v2 === val;
-        b.style.borderColor = active ? 'var(--accent)' : 'var(--border2)';
-        b.style.background = active ? 'var(--accent-light)' : 'transparent';
-        b.style.color = active ? 'var(--accent)' : 'var(--text2)';
+      if (!available) return;
+      localStorage.setItem('tts_voice', name);
+      localStorage.setItem('tts_lang', lang);
+      // Update pill styles
+      pillsDiv.querySelectorAll('button').forEach(b => {
+        const isActive = b.dataset.voiceName === name;
+        b.style.borderColor = isActive ? 'var(--accent)' : 'var(--border2)';
+        b.style.background  = isActive ? 'var(--accent-light)' : 'transparent';
+        b.style.color       = isActive ? 'var(--accent)' : 'var(--text2)';
       });
     };
-    langDiv.appendChild(btn);
+    pillsDiv.appendChild(btn);
   });
-
-  // Voice select
-  const voices = _buildTTSVoiceOptions(lang);
-  const sel = document.getElementById('tts-menu-voice');
-  sel.innerHTML = '<option value="">系統預設</option>' + voices.map(v=>`<option value="${v.name}" ${v.name===savedVoice?'selected':''}>${v.name}</option>`).join('');
 
   // Speed
   document.getElementById('tts-speed-slider').value = rate;
   document.getElementById('tts-speed-display').textContent = rate.toFixed(1) + 'x';
 
-  // Position: anchor below the button, clamp to viewport
+  // Position: clamp to viewport
   menu.style.display = 'block';
-  const mW = menu.offsetWidth || 220;
-  const mH = menu.offsetHeight || 200;
+  const mW = menu.offsetWidth || 200;
+  const mH = menu.offsetHeight || 180;
   let x = e.clientX;
   let y = e.clientY + 8;
   if (x + mW + 8 > window.innerWidth) x = window.innerWidth - mW - 8;
@@ -1397,10 +1386,6 @@ window.openTTSMenu = (e) => {
   if (y < 8) y = 8;
   menu.style.left = x + 'px';
   menu.style.top = y + 'px';
-};
-
-window.onTTSVoiceChange = (val) => {
-  localStorage.setItem('tts_voice', val);
 };
 
 window.onTTSSpeedChange = (val) => {
@@ -1419,25 +1404,17 @@ window.toggleTTS = () => {
   if (ttsPlaying) { stopTTS(); return; }
   const art = articles.find(a => a.id === currentArticleId);
   if (!art) return;
-  const ttsLang = localStorage.getItem('tts_lang') || 'zh-TW';
+  // Use saved voice; fall back to first available TTS_VOICES entry
+  const savedVoiceName = localStorage.getItem('tts_voice') || TTS_VOICES[0].name;
+  const preset = TTS_VOICES.find(v => v.name === savedVoiceName) || TTS_VOICES[0];
   const text = (art.body || '');
   const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = ttsLang;
-  const voiceName = localStorage.getItem('tts_voice');
+  utter.lang = preset.lang;
   const rate = parseFloat(localStorage.getItem('tts_rate') || '1');
   utter.rate = rate;
   const allVoices = speechSynthesis.getVoices();
-  const isEnLang = ttsLang === 'en-US' || ttsLang === 'en-GB';
-  const zhVoices = allVoices.filter(v => (v.lang.startsWith('zh-TW') || v.lang.startsWith('zh-CN') || v.lang.startsWith('cmn')) && !v.lang.includes('HK') && !v.name.toLowerCase().includes('hk') && !v.name.toLowerCase().includes('cantonese') && !v.name.toLowerCase().includes('粵'));
-  const enVoices = allVoices.filter(v => v.lang.startsWith('en-US') || v.lang.startsWith('en-GB'));
-  if (voiceName) {
-    const v = allVoices.find(v => v.name === voiceName);
-    if (v) utter.voice = v;
-  } else if (isEnLang && enVoices.length > 0) {
-    utter.voice = enVoices[0];
-  } else if (!isEnLang && zhVoices.length > 0) {
-    utter.voice = zhVoices[0];
-  }
+  const matched = allVoices.find(v => v.name === preset.name);
+  if (matched) utter.voice = matched;
   utter.onstart = () => {
     ttsPlaying = true;
     const btn = document.getElementById('tb-tts-btn');

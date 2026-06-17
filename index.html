@@ -384,16 +384,10 @@
 <div class="toast" id="toast"></div>
 
 <!-- TTS settings popup (right-click on 🔊) -->
-<div id="tts-menu" style="position:fixed;z-index:900;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:14px 16px;display:none;min-width:220px;max-width:90vw">
+<div id="tts-menu" style="position:fixed;z-index:900;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:14px 16px;display:none;min-width:200px;max-width:92vw">
   <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">語音設定</div>
-  <!-- Language -->
-  <div style="font-size:11px;color:var(--text3);margin-bottom:4px">語言</div>
-  <div id="tts-menu-lang" style="display:flex;gap:6px;margin-bottom:10px"></div>
-  <!-- Voice -->
-  <div style="font-size:11px;color:var(--text3);margin-bottom:4px">人聲</div>
-  <select id="tts-menu-voice" style="width:100%;padding:5px 8px;border:1px solid var(--border2);border-radius:var(--radius);font-size:12px;font-family:var(--font-sans);background:var(--surface);color:var(--text);outline:none;margin-bottom:10px" onchange="onTTSVoiceChange(this.value)">
-    <option value="">系統預設</option>
-  </select>
+  <!-- Voice pills -->
+  <div id="tts-voice-pills" style="display:flex;flex-direction:column;gap:5px;margin-bottom:12px"></div>
   <!-- Speed -->
   <div style="font-size:11px;color:var(--text3);margin-bottom:4px">語速</div>
   <div style="display:flex;align-items:center;gap:8px">
