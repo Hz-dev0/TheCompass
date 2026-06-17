@@ -1330,38 +1330,53 @@ window.togglePin = async () => {
 };
 
 // ── TTS ──
-// 三個固定人聲選項
+// 三個固定人聲 — 用關鍵字模糊比對，相容不同 Chrome 版本與 OS
 const TTS_VOICES = [
-  { label: '台灣中文', name: 'Google 國語（台灣）', lang: 'zh-TW' },
-  { label: '中國大陸', name: 'Google 普通話（中國大陸）', lang: 'zh-CN' },
-  { label: 'English',  name: 'Google US English',          lang: 'en-US' },
+  { label: '台灣中文', match: v => v.lang === 'zh-TW' && v.name.toLowerCase().includes('google'), lang: 'zh-TW' },
+  { label: '中國大陸', match: v => v.lang === 'zh-CN' && v.name.toLowerCase().includes('google'), lang: 'zh-CN' },
+  { label: 'English',  match: v => v.lang === 'en-US' && v.name.toLowerCase().includes('google'), lang: 'en-US' },
 ];
+
+// 快取 voices，onvoiceschanged 時更新（部分瀏覽器 getVoices 首次為空）
+let _cachedVoices = [];
+function _getVoices() {
+  const v = speechSynthesis.getVoices();
+  if (v.length) _cachedVoices = v;
+  return _cachedVoices;
+}
+speechSynthesis.onvoiceschanged = () => { _cachedVoices = speechSynthesis.getVoices(); };
+// 觸發一次確保盡早快取
+if (typeof speechSynthesis !== 'undefined') _getVoices();
+
+function _resolveVoice(preset) {
+  return _getVoices().find(preset.match) || null;
+}
 
 window.openTTSMenu = (e) => {
   e.preventDefault();
   const menu = document.getElementById('tts-menu');
-  const savedVoice = localStorage.getItem('tts_voice') || TTS_VOICES[0].name;
+  const savedLang = localStorage.getItem('tts_lang') || 'zh-TW';
   const rate = parseFloat(localStorage.getItem('tts_rate') || '1');
 
   // Voice pills
   const pillsDiv = document.getElementById('tts-voice-pills');
   pillsDiv.innerHTML = '';
-  const allVoices = speechSynthesis.getVoices();
-  TTS_VOICES.forEach(({ label, name, lang }) => {
-    const available = allVoices.some(v => v.name === name);
-    const active = savedVoice === name;
+  TTS_VOICES.forEach((preset) => {
+    const voice = _resolveVoice(preset);
+    const available = !!voice;
+    const active = savedLang === preset.lang && available;
+    const displayName = voice ? voice.name : preset.label + ' (不支援)';
     const btn = document.createElement('button');
-    btn.textContent = label + (available ? '' : ' (不支援)');
+    btn.textContent = displayName;
     btn.disabled = !available;
-    btn.dataset.voiceName = name;
+    btn.dataset.lang = preset.lang;
     btn.style.cssText = `width:100%;padding:6px 10px;text-align:left;font-size:12px;border-radius:var(--radius);cursor:${available?'pointer':'default'};border:1px solid ${active?'var(--accent)':'var(--border2)'};background:${active?'var(--accent-light)':'transparent'};color:${active?'var(--accent)':available?'var(--text2)':'var(--text3)'};font-family:var(--font-sans);opacity:${available?1:0.5}`;
     btn.onclick = () => {
-      if (!available) return;
-      localStorage.setItem('tts_voice', name);
-      localStorage.setItem('tts_lang', lang);
-      // Update pill styles
+      if (!available || !voice) return;
+      localStorage.setItem('tts_voice', voice.name);
+      localStorage.setItem('tts_lang', preset.lang);
       pillsDiv.querySelectorAll('button').forEach(b => {
-        const isActive = b.dataset.voiceName === name;
+        const isActive = b.dataset.lang === preset.lang;
         b.style.borderColor = isActive ? 'var(--accent)' : 'var(--border2)';
         b.style.background  = isActive ? 'var(--accent-light)' : 'transparent';
         b.style.color       = isActive ? 'var(--accent)' : 'var(--text2)';
@@ -1404,17 +1419,16 @@ window.toggleTTS = () => {
   if (ttsPlaying) { stopTTS(); return; }
   const art = articles.find(a => a.id === currentArticleId);
   if (!art) return;
-  // Use saved voice; fall back to first available TTS_VOICES entry
-  const savedVoiceName = localStorage.getItem('tts_voice') || TTS_VOICES[0].name;
-  const preset = TTS_VOICES.find(v => v.name === savedVoiceName) || TTS_VOICES[0];
+  // Resolve voice by saved lang (fuzzy match Google voice)
+  const savedLang = localStorage.getItem('tts_lang') || 'zh-TW';
+  const preset = TTS_VOICES.find(p => p.lang === savedLang) || TTS_VOICES[0];
   const text = (art.body || '');
   const utter = new SpeechSynthesisUtterance(text);
   utter.lang = preset.lang;
   const rate = parseFloat(localStorage.getItem('tts_rate') || '1');
   utter.rate = rate;
-  const allVoices = speechSynthesis.getVoices();
-  const matched = allVoices.find(v => v.name === preset.name);
-  if (matched) utter.voice = matched;
+  const resolvedVoice = _resolveVoice(preset);
+  if (resolvedVoice) utter.voice = resolvedVoice;
   utter.onstart = () => {
     ttsPlaying = true;
     const btn = document.getElementById('tb-tts-btn');
