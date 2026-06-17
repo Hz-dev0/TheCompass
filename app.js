@@ -829,6 +829,8 @@ window.openReading = (id) => {
   const art = articles.find(a => a.id === id);
   if (!art) return;
   currentArticleId = id;
+  // Push history state so mobile back button returns to article list
+  if (isMobile()) history.pushState({ reading: id }, '');
   mdMode = false;
   resetReadingFontSizeToDefault();
   highlightMode = false;
@@ -870,7 +872,7 @@ window.openReading = (id) => {
   setupMobileToolbar();
 };
 
-window.closeReading = () => {
+window.closeReading = (fromPopstate) => {
   // Clean up highlight mode if active
   if (highlightState !== 'off') {
     highlightState = 'off';
@@ -892,7 +894,21 @@ window.closeReading = () => {
   closeTbDropdowns();
   stopTTS();
   currentArticleId = null;
+  // On mobile, if we pushed a history state and this wasn't triggered by popstate, go back so
+  // the browser history stays clean (otherwise pressing back again would do nothing useful)
+  if (isMobile() && !fromPopstate && history.state && history.state.reading) {
+    history.back();
+  }
 };
+
+
+// ── Mobile back button → close reading modal ──
+window.addEventListener('popstate', (e) => {
+  const modal = document.getElementById('reading-modal');
+  if (modal && modal.classList.contains('open')) {
+    closeReading(true); // true = triggered by popstate, don't call history.back() again
+  }
+});
 
 function renderReadingPage(art) {
   // Title
@@ -1019,7 +1035,7 @@ function renderBodyPane(art) {
       html = html.replace(new RegExp(safeRe, 'g'), `<mark>${hEsc}</mark>`);
     }
     const cls = 'art-body-rendered' + (highlightState !== 'off' ? ' highlight-mode' : '');
-    pane.innerHTML = `<div class="${cls}" id="body-rendered">${html}</div>`;
+    pane.innerHTML = `<div class="${cls}" id="body-rendered" ondblclick="toggleReadingMd()" title="雙擊進入編輯模式">${html}</div>`;
   }
 }
 
@@ -1045,6 +1061,7 @@ function updateToolbarState(art) {
 
 window.autoResizeTitle = (el) => {
   el.style.height = 'auto';
+  el.style.whiteSpace = 'nowrap';
   el.style.height = el.scrollHeight + 'px';
 };
 
@@ -1313,25 +1330,88 @@ window.togglePin = async () => {
 };
 
 // ── TTS ──
-window.openTTSSpeedMenu = (e) => {
+function _buildTTSVoiceOptions(lang) {
+  const allVoices = speechSynthesis.getVoices();
+  let voices;
+  if (lang.startsWith('en')) {
+    voices = allVoices.filter(v => v.lang.startsWith('en-US') || v.lang.startsWith('en-GB'));
+  } else {
+    voices = allVoices.filter(v =>
+      (v.lang.startsWith('zh-TW') || v.lang.startsWith('zh-CN') || v.lang.startsWith('cmn'))
+      && !v.lang.includes('HK') && !v.name.toLowerCase().includes('cantonese') && !v.name.toLowerCase().includes('粵'));
+  }
+  return voices;
+}
+
+window.openTTSMenu = (e) => {
   e.preventDefault();
-  const menu = document.getElementById('tts-speed-menu');
-  menu.style.display = 'block';
-  menu.style.left = e.clientX + 'px';
-  menu.style.top = (e.clientY + 4) + 'px';
+  const menu = document.getElementById('tts-menu');
+  const lang = localStorage.getItem('tts_lang') || 'zh-TW';
+  const savedVoice = localStorage.getItem('tts_voice') || '';
   const rate = parseFloat(localStorage.getItem('tts_rate') || '1');
+
+  // Language pills
+  const langDiv = document.getElementById('tts-menu-lang');
+  langDiv.innerHTML = '';
+  [['zh-TW','中文'],['en-US','EN (US)'],['en-GB','EN (GB)']].forEach(([val, label]) => {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    btn.style.cssText = `flex:1;padding:4px 0;font-size:11px;border-radius:var(--radius);cursor:pointer;border:1px solid ${val===lang?'var(--accent)':'var(--border2)'};background:${val===lang?'var(--accent-light)':'transparent'};color:${val===lang?'var(--accent)':'var(--text2)'};font-family:var(--font-sans)`;
+    btn.onclick = () => {
+      localStorage.setItem('tts_lang', val);
+      localStorage.removeItem('tts_voice');
+      // Rebuild voice list for new lang
+      const voices = _buildTTSVoiceOptions(val);
+      const sel = document.getElementById('tts-menu-voice');
+      sel.innerHTML = '<option value="">系統預設</option>' + voices.map(v=>`<option value="${v.name}">${v.name}</option>`).join('');
+      // Rebuild pills
+      langDiv.querySelectorAll('button').forEach((b,i) => {
+        const v2 = [['zh-TW'],['en-US'],['en-GB']][i][0];
+        const active = v2 === val;
+        b.style.borderColor = active ? 'var(--accent)' : 'var(--border2)';
+        b.style.background = active ? 'var(--accent-light)' : 'transparent';
+        b.style.color = active ? 'var(--accent)' : 'var(--text2)';
+      });
+    };
+    langDiv.appendChild(btn);
+  });
+
+  // Voice select
+  const voices = _buildTTSVoiceOptions(lang);
+  const sel = document.getElementById('tts-menu-voice');
+  sel.innerHTML = '<option value="">系統預設</option>' + voices.map(v=>`<option value="${v.name}" ${v.name===savedVoice?'selected':''}>${v.name}</option>`).join('');
+
+  // Speed
   document.getElementById('tts-speed-slider').value = rate;
   document.getElementById('tts-speed-display').textContent = rate.toFixed(1) + 'x';
+
+  // Position: anchor below the button, clamp to viewport
+  menu.style.display = 'block';
+  const mW = menu.offsetWidth || 220;
+  const mH = menu.offsetHeight || 200;
+  let x = e.clientX;
+  let y = e.clientY + 8;
+  if (x + mW + 8 > window.innerWidth) x = window.innerWidth - mW - 8;
+  if (x < 8) x = 8;
+  if (y + mH + 8 > window.innerHeight) y = e.clientY - mH - 8;
+  if (y < 8) y = 8;
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
 };
+
+window.onTTSVoiceChange = (val) => {
+  localStorage.setItem('tts_voice', val);
+};
+
 window.onTTSSpeedChange = (val) => {
   const r = parseFloat(val);
   localStorage.setItem('tts_rate', r);
   document.getElementById('tts-speed-display').textContent = r.toFixed(1) + 'x';
-  // If currently playing, update rate live
+  // If currently playing, restart with new rate
   if (ttsUtterance && ttsPlaying) { speechSynthesis.cancel(); window.toggleTTS(); }
 };
 document.addEventListener('click', e => {
-  const menu = document.getElementById('tts-speed-menu');
+  const menu = document.getElementById('tts-menu');
   if (menu && !menu.contains(e.target) && e.target.id !== 'tb-tts-btn') menu.style.display = 'none';
 });
 
@@ -1339,19 +1419,23 @@ window.toggleTTS = () => {
   if (ttsPlaying) { stopTTS(); return; }
   const art = articles.find(a => a.id === currentArticleId);
   if (!art) return;
-  const text = (art.title || '') + '。' + (art.body || '');
+  const ttsLang = localStorage.getItem('tts_lang') || 'zh-TW';
+  const text = (art.body || '');
   const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = 'zh-TW';
+  utter.lang = ttsLang;
   const voiceName = localStorage.getItem('tts_voice');
   const rate = parseFloat(localStorage.getItem('tts_rate') || '1');
   utter.rate = rate;
-  // Filter voices: prefer zh-TW or zh-CN, exclude yue/hk
   const allVoices = speechSynthesis.getVoices();
+  const isEnLang = ttsLang === 'en-US' || ttsLang === 'en-GB';
   const zhVoices = allVoices.filter(v => (v.lang.startsWith('zh-TW') || v.lang.startsWith('zh-CN') || v.lang.startsWith('cmn')) && !v.lang.includes('HK') && !v.name.toLowerCase().includes('hk') && !v.name.toLowerCase().includes('cantonese') && !v.name.toLowerCase().includes('粵'));
+  const enVoices = allVoices.filter(v => v.lang.startsWith('en-US') || v.lang.startsWith('en-GB'));
   if (voiceName) {
     const v = allVoices.find(v => v.name === voiceName);
     if (v) utter.voice = v;
-  } else if (zhVoices.length > 0) {
+  } else if (isEnLang && enVoices.length > 0) {
+    utter.voice = enVoices[0];
+  } else if (!isEnLang && zhVoices.length > 0) {
     utter.voice = zhVoices[0];
   }
   utter.onstart = () => {
@@ -1901,12 +1985,25 @@ function renderSettingsBody() {
     return;
   }
   if (currentSettingsTab === 'tts') {
-    const voices = speechSynthesis.getVoices().filter(v =>
-      (v.lang.startsWith('zh-TW') || v.lang.startsWith('zh-CN') || v.lang.startsWith('cmn'))
-      && !v.lang.includes('HK') && !v.name.toLowerCase().includes('cantonese') && !v.name.toLowerCase().includes('粵'));
+    const allVoices = speechSynthesis.getVoices();
+    const savedLang = localStorage.getItem('tts_lang') || 'zh-TW';
     const savedVoice = localStorage.getItem('tts_voice') || '';
     const savedRate = localStorage.getItem('tts_rate') || '1';
+    const zhVoices = allVoices.filter(v =>
+      (v.lang.startsWith('zh-TW') || v.lang.startsWith('zh-CN') || v.lang.startsWith('cmn'))
+      && !v.lang.includes('HK') && !v.name.toLowerCase().includes('cantonese') && !v.name.toLowerCase().includes('粵'));
+    const enVoices = allVoices.filter(v => v.lang.startsWith('en-US') || v.lang.startsWith('en-GB'));
+    const voices = savedLang.startsWith('en') ? enVoices : zhVoices;
+    const testText = savedLang.startsWith('en') ? 'Hello! This is a voice test.' : '測試語音，你好！';
     body.innerHTML = `
+      <div class="settings-row">
+        <label>語言</label>
+        <select id="tts-lang-select" onchange="localStorage.setItem('tts_lang',this.value);localStorage.removeItem('tts_voice');renderSettingsBody()">
+          <option value="zh-TW" ${savedLang==='zh-TW'?'selected':''}>中文（普通話）</option>
+          <option value="en-US" ${savedLang==='en-US'?'selected':''}>English (US)</option>
+          <option value="en-GB" ${savedLang==='en-GB'?'selected':''}>English (GB)</option>
+        </select>
+      </div>
       <div class="settings-row">
         <label>人聲</label>
         <select id="voice-select" onchange="localStorage.setItem('tts_voice',this.value)">
@@ -1922,7 +2019,7 @@ function renderSettingsBody() {
       </div>
       <div class="settings-row">
         <label></label>
-        <button class="btn" onclick="speechSynthesis.speak(Object.assign(new SpeechSynthesisUtterance('測試語音，你好！'),{lang:'zh-TW',rate:parseFloat(localStorage.getItem('tts_rate')||1),voice:speechSynthesis.getVoices().find(v=>v.name===localStorage.getItem('tts_voice'))||null}))">▶ 試聽</button>
+        <button class="btn" onclick="(()=>{const u=new SpeechSynthesisUtterance('${testText}');u.lang='${savedLang}';u.rate=parseFloat(localStorage.getItem('tts_rate')||1);const v=speechSynthesis.getVoices().find(v=>v.name===localStorage.getItem('tts_voice'));if(v)u.voice=v;speechSynthesis.speak(u)})()">▶ 試聽</button>
       </div>
     `;
   } else if (currentSettingsTab === 'appearance') {

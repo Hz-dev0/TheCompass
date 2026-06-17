@@ -154,7 +154,7 @@
       <button class="tb-btn" id="tb-fav-btn" onclick="toggleFavorite()" title="收藏">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
       </button>
-      <button class="tb-btn" id="tb-tts-btn" onclick="toggleTTS()" oncontextmenu="openTTSSpeedMenu(event)" title="朗讀（右鍵調語速）">🔊</button>
+      <button class="tb-btn" id="tb-tts-btn" onclick="toggleTTS()" oncontextmenu="openTTSMenu(event)" title="朗讀（右鍵設定語音）">🔊</button>
       <button class="tb-btn" id="tb-pin-btn" onclick="togglePin()" title="置頂">🔻</button>
       <button class="tb-btn" id="tb-collapse-btn" onclick="toggleTitleBar()" title="摺疊標題">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="18 15 12 9 6 15"/></svg>
@@ -300,7 +300,8 @@
   <div class="reading-title-bar">
     <textarea class="reading-title-input" id="new-title" rows="1"
       placeholder="文章標題…"
-      oninput="autoResizeTitle(this)"></textarea>
+      oninput="autoResizeTitle(this)"
+      style="white-space:nowrap;overflow-x:hidden;resize:none"></textarea>
     <div class="reading-meta-row" id="new-meta-row"></div>
   </div>
 
@@ -382,9 +383,19 @@
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
-<!-- TTS Speed context menu -->
-<div id="tts-speed-menu" style="position:fixed;z-index:900;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:10px 14px;display:none;min-width:200px">
-  <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">即時語速調整</div>
+<!-- TTS settings popup (right-click on 🔊) -->
+<div id="tts-menu" style="position:fixed;z-index:900;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:14px 16px;display:none;min-width:220px;max-width:90vw">
+  <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">語音設定</div>
+  <!-- Language -->
+  <div style="font-size:11px;color:var(--text3);margin-bottom:4px">語言</div>
+  <div id="tts-menu-lang" style="display:flex;gap:6px;margin-bottom:10px"></div>
+  <!-- Voice -->
+  <div style="font-size:11px;color:var(--text3);margin-bottom:4px">人聲</div>
+  <select id="tts-menu-voice" style="width:100%;padding:5px 8px;border:1px solid var(--border2);border-radius:var(--radius);font-size:12px;font-family:var(--font-sans);background:var(--surface);color:var(--text);outline:none;margin-bottom:10px" onchange="onTTSVoiceChange(this.value)">
+    <option value="">系統預設</option>
+  </select>
+  <!-- Speed -->
+  <div style="font-size:11px;color:var(--text3);margin-bottom:4px">語速</div>
   <div style="display:flex;align-items:center;gap:8px">
     <span style="font-size:11px;color:var(--text3)">0.5x</span>
     <input type="range" id="tts-speed-slider" min="0.5" max="2" step="0.1" value="1" style="flex:1" oninput="onTTSSpeedChange(this.value)">
