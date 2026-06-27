@@ -1061,7 +1061,7 @@ function updateToolbarState(art) {
 
 window.autoResizeTitle = (el) => {
   el.style.height = 'auto';
-  el.style.whiteSpace = 'nowrap';
+  el.style.whiteSpace = 'pre-wrap';
   el.style.height = el.scrollHeight + 'px';
 };
 
@@ -1651,6 +1651,10 @@ window.openNewModal = () => {
   document.getElementById('new-title').value = '';
   document.getElementById('new-body').value = '';
   document.getElementById('new-notes').value = '';
+  const newAuthorEl = document.getElementById('new-author');
+  if (newAuthorEl) newAuthorEl.value = '';
+  const newUrlEl = document.getElementById('new-url');
+  if (newUrlEl) newUrlEl.value = '';
   document.getElementById('new-save-btn').disabled = false;
   document.getElementById('new-save-btn').textContent = '儲存';
   // Default to edit (raw) mode since a new article starts empty
@@ -1773,10 +1777,12 @@ window.saveNewArticle = async () => {
   saveBtn.disabled = true;
   saveBtn.textContent = '儲存中…';
   const notes = document.getElementById('new-notes').value.trim();
+  const author = (document.getElementById('new-author')?.value || '').trim();
+  const url = (document.getElementById('new-url')?.value || '').trim();
   try {
     const docRef = await addDoc(collection(db, 'articles'), {
       uid: currentUser.uid,
-      title, body, tags: [...newTags], folderId: newFolderId,
+      title, body, author, url, tags: [...newTags], folderId: newFolderId,
       notes, highlight: '',
       readStatus: '', favorite: false,
       createdAt: serverTimestamp()

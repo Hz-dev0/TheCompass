@@ -299,17 +299,27 @@
 
   <!-- Title bar -->
   <div class="reading-title-bar" id="new-title-bar">
-    <textarea class="reading-title-input" id="new-title" rows="1"
-      placeholder="文章標題…"
-      oninput="autoResizeTitle(this)"
-      style="resize:none"></textarea>
+    <div class="reading-title-top">
+      <textarea class="reading-title-input" id="new-title" rows="1"
+        placeholder="文章標題…"
+        oninput="autoResizeTitle(this)"
+        style="resize:none"></textarea>
+      <div class="reading-author-wrap">
+        <span class="reading-author-label">作者</span>
+        <input class="reading-author-input" id="new-author" placeholder="未填寫" />
+      </div>
+    </div>
+    <div class="new-url-row">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:12px;height:12px;flex-shrink:0;color:var(--text3)"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      <input class="new-url-input" id="new-url" placeholder="來源網址（選填）" type="url" />
+    </div>
     <div class="reading-meta-row" id="new-meta-row"></div>
   </div>
 
   <!-- Body + Notes split (same as reading page) -->
   <div class="reading-body-wrap">
     <div class="reading-body-pane" id="new-body-pane">
-      <textarea class="art-body-editor" id="new-body" placeholder="貼上文章內文…"></textarea>
+      <textarea class="art-body-editor" id="new-body" placeholder="貼上文章內文，或直接開始寫作…&#10;&#10;支援 Markdown：**粗體**、*斜體*、# 標題、- 清單"></textarea>
     </div>
     <div class="reading-notes-pane" id="new-notes-pane">
       <div class="notes-pane-label">

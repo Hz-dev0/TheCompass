@@ -622,7 +622,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   flex: 1; font-family: var(--font-serif); font-size: 22px; font-weight: 500;
   color: var(--text); background: transparent; border: none; outline: none;
   line-height: 1.4; resize: none; overflow: hidden;
-  text-align: center;
+  text-align: left;
 }
 .reading-author-wrap {
   display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
@@ -700,7 +700,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   background: var(--surface2); font-weight: 500;
 }
 .art-body-editor {
-  width: 100%; min-height: 120px; font-family: var(--font-sans); font-size: var(--reading-font-size, 14px);
+  width: 100%; min-height: 0; font-family: var(--font-sans); font-size: 15px;
   line-height: 1.8; color: var(--text); background: transparent;
   border: 1px solid var(--border); border-radius: var(--radius);
   padding: 16px; resize: none; outline: none; overflow: auto;
@@ -1070,3 +1070,46 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   #reading-tap-hint.visible { opacity: 1; }
 }
 
+/* ── New modal URL row ── */
+.new-url-row {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 8px; padding: 0 2px;
+}
+.new-url-input {
+  flex: 1; border: none; border-bottom: 1px solid var(--border);
+  background: transparent; outline: none; font-size: 12px;
+  font-family: var(--font-sans); color: var(--text3);
+  padding: 2px 0; transition: border-color 0.15s;
+}
+.new-url-input:focus { border-bottom-color: var(--accent); color: var(--text2); }
+.new-url-input::placeholder { color: var(--text3); }
+
+/* ── New modal title bar spacing ── */
+#new-title-bar {
+  padding-bottom: 14px;
+  /* 隨視窗寬度等比縮放 padding，確保標題欄充分利用空間 */
+  padding-left: clamp(24px, 5vw, 80px);
+  padding-right: clamp(24px, 5vw, 80px);
+}
+#new-title-bar .reading-meta-row {
+  margin-bottom: 0;
+}
+
+/* new-modal body pane 隨視窗等比縮放 padding */
+#new-body-pane {
+  padding: clamp(16px, 4vw, 60px) clamp(24px, 5vw, 80px);
+}
+#new-body-pane .art-body-editor,
+#new-body-pane .art-body-viewonly {
+  max-width: 100%;
+}
+
+/* ── New modal mobile adjustments ── */
+@media (max-width: 768px) {
+  #new-modal .reading-notes-pane {
+    height: 38vh;
+  }
+  #new-title-bar .new-url-row {
+    display: none;
+  }
+}
