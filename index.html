@@ -265,7 +265,7 @@
   <!-- Toolbar -->
   <div class="reading-toolbar-wrap">
     <div class="reading-toolbar" id="new-toolbar">
-      <button class="icon-btn" onclick="closeNewModal()" title="取消">
+      <button class="tb-btn" onclick="closeNewModal()" title="取消">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
       </button>
       <div class="tb-sep"></div>
@@ -279,7 +279,8 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
       </button>
       <div class="tb-spacer"></div>
-      <button class="tb-btn" id="new-md-btn" onclick="toggleNewMd()" title="編輯模式">📝</button>
+      <button class="tb-btn" id="new-notes-btn" onclick="toggleNewNotesPane()" title="筆記欄">✒️</button>
+      <button class="tb-btn" id="new-md-btn" onclick="toggleNewMd()" title="切換預覽／編輯">📝</button>
       <button class="btn btn-primary" id="new-save-btn" onclick="saveNewArticle()" style="height:30px;padding:0 14px;font-size:13px">儲存</button>
     </div>
     <!-- Tag dropdown -->
@@ -290,18 +291,18 @@
       <div id="new-tag-list"></div>
     </div>
     <!-- Folder dropdown -->
-    <div class="tb-dropdown right" id="new-folder-dropdown">
+    <div class="tb-dropdown left" id="new-folder-dropdown">
       <div class="tb-dropdown-label">選擇資料夾</div>
       <div id="new-folder-list"></div>
     </div>
   </div>
 
   <!-- Title bar -->
-  <div class="reading-title-bar">
+  <div class="reading-title-bar" id="new-title-bar">
     <textarea class="reading-title-input" id="new-title" rows="1"
       placeholder="文章標題…"
       oninput="autoResizeTitle(this)"
-      style="white-space:nowrap;overflow-x:hidden;resize:none"></textarea>
+      style="resize:none"></textarea>
     <div class="reading-meta-row" id="new-meta-row"></div>
   </div>
 

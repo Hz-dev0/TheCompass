@@ -610,7 +610,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 
 /* Article title bar */
 .reading-title-bar {
-  padding: 0 24px 12px; background: var(--surface);
+  padding: 12px 24px 12px; background: var(--surface);
   border-bottom: 1px solid var(--border); flex-shrink: 0;
   transition: all 0.2s ease;
 }
@@ -988,6 +988,9 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   .modal-overlay {
     overflow: hidden;
   }
+  .new-modal {
+    overflow: hidden;
+  }
   .reading-toolbar-wrap {
     position: fixed; top: 0; left: 0; right: 0; z-index: 220;
     /* transition height for collapse */
@@ -1014,6 +1017,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 
   /* Offset for fixed toolbar — use padding so content starts below toolbar */
   #reading-modal .reading-title-bar { margin-top: 44px; }
+  #new-modal .reading-title-bar { margin-top: 44px; }
   /* When toolbar is collapsed, no offset needed — but we keep it for layout consistency */
 
   /* Title bar */

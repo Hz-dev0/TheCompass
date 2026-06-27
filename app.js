@@ -1197,6 +1197,17 @@ window.toggleNotesPane = () => {
   document.getElementById('tb-notes-btn').classList.toggle('active', notesVisible);
 };
 
+let newNotesVisible = false;
+window.toggleNewNotesPane = () => {
+  newNotesVisible = !newNotesVisible;
+  const pane = document.getElementById('new-notes-pane');
+  const bodyPane = document.getElementById('new-body-pane');
+  if (pane) pane.classList.toggle('hidden', !newNotesVisible);
+  if (bodyPane) bodyPane.classList.toggle('full', !newNotesVisible);
+  const btn = document.getElementById('new-notes-btn');
+  if (btn) btn.classList.toggle('active', newNotesVisible);
+};
+
 window.toggleTitleBar = () => {
   titleBarVisible = !titleBarVisible;
   document.getElementById('reading-title-bar').classList.toggle('collapsed', !titleBarVisible);
@@ -1650,10 +1661,13 @@ window.openNewModal = () => {
   textarea.style.display = '';
   if (viewDiv) viewDiv.style.display = 'none';
   // Default: hide notes pane
+  newNotesVisible = false;
   const newNotesPane = document.getElementById('new-notes-pane');
   const newBodyPane = document.getElementById('new-body-pane');
   if (newNotesPane) newNotesPane.classList.add('hidden');
   if (newBodyPane) newBodyPane.classList.add('full');
+  const newNotesBtnEl = document.getElementById('new-notes-btn');
+  if (newNotesBtnEl) newNotesBtnEl.classList.remove('active');
   renderNewMetaRow();
   renderNewTagDropdown();
   renderNewFolderDropdown();
