@@ -822,6 +822,7 @@ let notesVisible = true;
 let titleBarVisible = true;
 let ttsUtterance = null;
 let ttsPlaying = false;
+let _ttsKeepAliveTimer = null;
 let toolbarCollapseTimer = null;
 let isMobile = () => window.innerWidth <= 768;
 
@@ -923,6 +924,10 @@ function renderReadingPage(art) {
   metaRow.innerHTML = (art.tags||[]).map(t =>
     `<span class="reading-meta-tag" onclick="removeTagFromArticle('${escHtml(t)}')">${escHtml(t)} ×</span>`
   ).join('');
+  if (art.folderId) {
+    const f = folders.find(f => f.id === art.folderId);
+    if (f) metaRow.innerHTML += `<span class="reading-meta-tag" style="background:var(--accent2-light);color:var(--accent2);border-color:rgba(193,127,58,0.3)" onclick="setArticleFolder(null)">📁 ${escHtml(f.name)} ×</span>`;
+  }
   // Body
   renderBodyPane(art);
   // Notes
@@ -1270,9 +1275,19 @@ async function toggleTagOnArticle(tag) {
   if (!art) return;
   const tags = art.tags || [];
   const newTags = tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag];
-  await updateDoc(doc(db, 'articles', currentArticleId), { tags: newTags });
-  renderTagDropdown({...art, tags: newTags});
-  renderReadingPage({...art, tags: newTags});
+  // Optimistic update: reflect the change immediately, then sync to Firestore.
+  art.tags = newTags;
+  renderTagDropdown(art);
+  renderReadingPage(art);
+  try {
+    await updateDoc(doc(db, 'articles', currentArticleId), { tags: newTags });
+  } catch (e) {
+    // Roll back on failure
+    art.tags = tags;
+    renderTagDropdown(art);
+    renderReadingPage(art);
+    showToast('標籤更新失敗：' + e.message);
+  }
 }
 
 window.removeTagFromArticle = async (tag) => {
@@ -1297,12 +1312,24 @@ function renderFolderDropdown(art) {
   });
 }
 
-async function setArticleFolder(folderId) {
+window.setArticleFolder = async function setArticleFolder(folderId) {
   if (!currentArticleId) return;
-  await updateDoc(doc(db, 'articles', currentArticleId), { folderId: folderId || null });
+  const art = articles.find(a => a.id === currentArticleId);
+  const prevFolderId = art ? art.folderId : undefined;
+  // Optimistic update
+  if (art) {
+    art.folderId = folderId || null;
+    renderReadingPage(art);
+  }
   closeTbDropdowns();
-  showToast(folderId ? '已移至資料夾' : '已移出資料夾');
-}
+  try {
+    await updateDoc(doc(db, 'articles', currentArticleId), { folderId: folderId || null });
+    showToast(folderId ? '已移至資料夾' : '已移出資料夾');
+  } catch (e) {
+    if (art) { art.folderId = prevFolderId; renderReadingPage(art); }
+    showToast('移動資料夾失敗：' + e.message);
+  }
+};
 
 // ── Read status (2 states: 待閱🔲 / 已閱☑️) ──
 window.toggleReadStatus = async () => {
@@ -1430,24 +1457,53 @@ window.toggleTTS = () => {
   if (ttsPlaying) { stopTTS(); return; }
   const art = articles.find(a => a.id === currentArticleId);
   if (!art) return;
-  // Resolve voice by saved lang (fuzzy match Google voice)
+  const text = (art.body || '').trim();
+  if (!text) { showToast('這篇文章沒有內容可以朗讀'); return; }
+
   const savedLang = localStorage.getItem('tts_lang') || 'zh-TW';
-  const preset = TTS_VOICES.find(p => p.lang === savedLang) || TTS_VOICES[0];
-  const text = (art.body || '');
+  const savedVoiceName = localStorage.getItem('tts_voice') || '';
+  const voices = _getVoices();
+
+  // Resolve voice with the same priority as the Settings "試聽" preview:
+  // 1) the exact voice the user picked in Settings (if it's still available)
+  // 2) any voice matching the saved language
+  // 3) fuzzy "Google" voice match for the 3 quick presets (legacy fallback)
+  let resolvedVoice = savedVoiceName ? voices.find(v => v.name === savedVoiceName) : null;
+  if (!resolvedVoice) resolvedVoice = voices.find(v => v.lang === savedLang) || null;
+  if (!resolvedVoice) {
+    const preset = TTS_VOICES.find(p => p.lang === savedLang);
+    if (preset) resolvedVoice = _resolveVoice(preset);
+  }
+
+  if (voices.length && !resolvedVoice && !voices.some(v => v.lang.startsWith(savedLang.split('-')[0]))) {
+    // No installed voice can plausibly speak this language — speechSynthesis
+    // tends to fail silently in this case rather than throwing, so warn explicitly.
+    showToast('找不到對應的語音，請到設定 > 朗讀 選擇其他語言或人聲');
+    return;
+  }
+
   const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = preset.lang;
+  utter.lang = resolvedVoice ? resolvedVoice.lang : savedLang;
   const rate = parseFloat(localStorage.getItem('tts_rate') || '1');
   utter.rate = rate;
-  const resolvedVoice = _resolveVoice(preset);
   if (resolvedVoice) utter.voice = resolvedVoice;
   utter.onstart = () => {
     ttsPlaying = true;
     const btn = document.getElementById('tb-tts-btn');
     if (btn) { btn.classList.add('active'); btn.textContent = '⏹'; }
     document.getElementById('tts-progress').classList.add('active');
+    // Chrome stops speechSynthesis after ~15s of silence/inactivity on long
+    // utterances unless periodically nudged with pause/resume.
+    clearInterval(_ttsKeepAliveTimer);
+    _ttsKeepAliveTimer = setInterval(() => {
+      if (!ttsPlaying) { clearInterval(_ttsKeepAliveTimer); return; }
+      speechSynthesis.pause();
+      speechSynthesis.resume();
+    }, 10000);
   };
   utter.onend = utter.onerror = () => {
     ttsPlaying = false;
+    clearInterval(_ttsKeepAliveTimer);
     const btn = document.getElementById('tb-tts-btn');
     if (btn) { btn.classList.remove('active'); btn.textContent = '🔊'; }
     document.getElementById('tts-progress').classList.remove('active');
@@ -1466,6 +1522,7 @@ window.toggleTTS = () => {
 function stopTTS() {
   speechSynthesis.cancel();
   ttsPlaying = false;
+  clearInterval(_ttsKeepAliveTimer);
   const btn = document.getElementById('tb-tts-btn');
   if (btn) { btn.classList.remove('active'); btn.textContent = '🔊'; }
   const prog = document.getElementById('tts-progress');
@@ -1691,7 +1748,7 @@ function renderNewMetaRow() {
   ).join('');
   if (newFolderId) {
     const f = folders.find(f => f.id === newFolderId);
-    if (f) row.innerHTML += `<span class="reading-meta-tag" style="background:var(--accent2-light);color:var(--accent2);border-color:rgba(193,127,58,0.3)" onclick="newFolderId=null;renderNewMetaRow()">📁 ${escHtml(f.name)} ×</span>`;
+    if (f) row.innerHTML += `<span class="reading-meta-tag" style="background:var(--accent2-light);color:var(--accent2);border-color:rgba(193,127,58,0.3)" onclick="window.clearNewFolder()">📁 ${escHtml(f.name)} ×</span>`;
   }
 }
 
@@ -1722,6 +1779,8 @@ window.handleNewTagInput = (e) => {
 };
 
 window.removeNewTag = (tag) => { newTags = newTags.filter(t => t !== tag); renderNewMetaRow(); renderNewTagDropdown(); };
+
+window.clearNewFolder = () => { newFolderId = null; renderNewMetaRow(); renderNewFolderDropdown(); };
 
 function renderNewFolderDropdown() {
   const list = document.getElementById('new-folder-list');
@@ -1980,6 +2039,7 @@ document.getElementById('settings-modal').addEventListener('click', e => {
   if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
 });
 
+window.renderSettingsBody = renderSettingsBody;
 function renderSettingsBody() {
   const body = document.getElementById('settings-body');
   if (currentSettingsTab === 'export') {
@@ -2058,7 +2118,7 @@ function renderSettingsBody() {
       </div>` : ''}
       <div class="settings-row" style="margin-top:4px">
         <label></label>
-        <button class="btn btn-danger" onclick="if(confirm('確定登出？'))signOut(auth)">登出</button>
+        <button class="btn btn-danger" onclick="doSignOut()">登出</button>
       </div>
     `;
   }
