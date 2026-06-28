@@ -5,7 +5,13 @@
    ===================================================== */
 
 const VERSION = '__BUILD_VERSION__';   // ← GitHub Actions 會替換這行
-const CACHE   = `shoucezhe-${VERSION}`;
+// 如果不是透過 GitHub Actions 部署（例如直接上傳檔案到別的主機），
+// 上面這行不會被取代成真正的版本號，快取名稱永遠相同，瀏覽器會一直
+// 沿用第一次安裝時快取的舊 app.js，之後怎麼更新檔案都吃不到。
+// 手動部署時，請把下面這個數字改掉（隨便改，只要跟上次不同即可），
+// 確保使用者能拿到最新版本。
+const MANUAL_VERSION = '2';
+const CACHE = `shoucezhe-${VERSION === '__BUILD_VERSION__' ? MANUAL_VERSION : VERSION}`;
 
 // 需要預先快取的靜態資源（不含 Firebase CDN，那些走網路）
 const PRECACHE = [
