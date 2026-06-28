@@ -823,6 +823,20 @@ let titleBarVisible = true;
 let ttsUtterance = null;
 let ttsPlaying = false;
 let _ttsKeepAliveTimer = null;
+let _lastBodySelection = '';
+document.addEventListener('selectionchange', () => {
+  const bodyEl = document.getElementById('reading-body-content');
+  const sel = window.getSelection();
+  if (!bodyEl || !sel || !sel.rangeCount) return;
+  const text = sel.toString().trim();
+  if (text && bodyEl.contains(sel.getRangeAt(0).startContainer)) {
+    _lastBodySelection = text;
+  } else if (!text) {
+    // Selection was cleared (e.g. user clicked elsewhere) — forget it so a
+    // stale selection from a previous read doesn't silently keep being used.
+    _lastBodySelection = '';
+  }
+});
 let toolbarCollapseTimer = null;
 let isMobile = () => window.innerWidth <= 768;
 
@@ -919,6 +933,10 @@ function renderReadingPage(art) {
   // Author
   const authorEl = document.getElementById('reading-author-input');
   if (authorEl) authorEl.value = art.author || '';
+  // Source URL
+  const urlEl = document.getElementById('reading-url-input');
+  if (urlEl) urlEl.value = art.url || '';
+  window.syncReadingUrlLink();
   // Meta tags row
   const metaRow = document.getElementById('reading-meta-row');
   metaRow.innerHTML = (art.tags||[]).map(t =>
@@ -1120,6 +1138,19 @@ window.scheduleFieldSave = (field, value) => {
   }, 800); // faster: 800ms instead of 2500ms for title/author
 };
 
+window.syncReadingUrlLink = () => {
+  const input = document.getElementById('reading-url-input');
+  const link = document.getElementById('reading-url-open');
+  if (!input || !link) return;
+  const val = input.value.trim();
+  if (val) {
+    link.href = /^https?:\/\//i.test(val) ? val : 'https://' + val;
+    link.style.display = 'inline-flex';
+  } else {
+    link.style.display = 'none';
+  }
+};
+
 window.scheduleNotesSave = (value) => {
   clearTimeout(saveTimeout);
   setSyncStatus('syncing');
@@ -1223,14 +1254,15 @@ window.toggleTitleBar = () => {
 };
 
 // ── Toolbar dropdowns ──
-window.toggleTbDropdown = (id) => {
+window.toggleTbDropdown = (id, btnIdOverride) => {
   const dd = document.getElementById(id);
   const isOpen = dd.classList.contains('open');
   closeTbDropdowns();
   if (!isOpen) {
     dd.classList.add('open');
     // Position dropdown below its trigger button
-    const btnId = id === 'folder-dropdown' ? 'tb-folder-btn' : 'tb-tag-btn';
+    const idMap = { 'folder-dropdown': 'tb-folder-btn', 'tag-dropdown': 'tb-tag-btn', 'fontsize-dropdown': 'tb-fontsize-btn' };
+    const btnId = btnIdOverride || idMap[id] || 'tb-tag-btn';
     const btn = document.getElementById(btnId);
     if (btn) {
       const rect = btn.getBoundingClientRect();
@@ -1505,12 +1537,87 @@ let _ttsTotalLen = 0;
 let _ttsCharsBefore = 0;
 let _ttsGen = 0; // bumped on every stop/restart so stale callbacks can be ignored
 
+// Split text into consecutive runs of CJK vs. non-CJK (Latin/digits/etc) script.
+// A Chinese voice reading raw English words (or vice versa) mispronounces
+// badly — separating runs lets us hand each one to the voice that actually
+// matches it. Short runs (e.g. a single punctuation mark) are merged into
+// whichever neighboring run they're closer to, so we don't fire a flurry of
+// one-character utterances.
+function _splitByScript(text) {
+  const isCJK = ch => /[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/.test(ch);
+  const runs = [];
+  let cur = '', curType = null;
+  for (const ch of text) {
+    const cjk = isCJK(ch);
+    // Punctuation/whitespace/digits are "neutral" — stick with current run
+    // rather than forcing a new (likely tiny) segment.
+    const type = /[\p{L}]/u.test(ch) ? cjk : curType;
+    if (type === curType || curType === null) {
+      cur += ch;
+      if (curType === null && type !== null) curType = type;
+    } else {
+      runs.push({ text: cur, cjk: curType });
+      cur = ch;
+      curType = type;
+    }
+  }
+  if (cur) runs.push({ text: cur, cjk: curType ?? true });
+  // Merge runs shorter than 4 chars into the previous run to avoid
+  // fragmenting on stray punctuation/single letters.
+  const merged = [];
+  for (const r of runs) {
+    if (merged.length && r.text.trim().length < 4) {
+      merged[merged.length - 1].text += r.text;
+    } else {
+      merged.push({ ...r });
+    }
+  }
+  // A short-run absorption above can leave two same-type runs adjacent
+  // (e.g. LATIN, [short CJK absorbed into previous], LATIN) — collapse those.
+  const collapsed = [];
+  for (const r of merged) {
+    if (collapsed.length && collapsed[collapsed.length - 1].cjk === r.cjk) {
+      collapsed[collapsed.length - 1].text += r.text;
+    } else {
+      collapsed.push(r);
+    }
+  }
+  return collapsed.filter(r => r.text.trim());
+}
+
 window.toggleTTS = () => {
   if (ttsPlaying) { stopTTS(); return; }
   const art = articles.find(a => a.id === currentArticleId);
   if (!art) return;
   const text = (art.body || '').trim();
   if (!text) { showToast('這篇文章沒有內容可以朗讀'); return; }
+
+  // If the user has selected some text in the body, start reading from there.
+  let startOffset = 0;
+  let selectedText = _lastBodySelection;
+  // In edit mode the body is a <textarea>, which the Selection API can't see —
+  // check its native selectionStart/End instead.
+  const editorEl = document.getElementById('body-editor');
+  if (editorEl && editorEl.selectionStart !== editorEl.selectionEnd) {
+    selectedText = editorEl.value.slice(editorEl.selectionStart, editorEl.selectionEnd).trim();
+  } else if (!selectedText) {
+    const sel = window.getSelection();
+    const bodyEl = document.getElementById('reading-body-content');
+    if (sel && sel.toString().trim() && sel.rangeCount && bodyEl && bodyEl.contains(sel.getRangeAt(0).startContainer)) {
+      selectedText = sel.toString().trim();
+    }
+  }
+  if (selectedText) {
+    // Use the first ~24 chars as a search key — long enough to be a fairly
+    // unique anchor point, short enough to tolerate minor whitespace/markdown
+    // differences between the rendered DOM text and the raw markdown source.
+    const key = selectedText.slice(0, 24);
+    const idx = text.indexOf(key);
+    if (idx !== -1) startOffset = idx;
+  }
+  _lastBodySelection = ''; // consumed — next play() without a fresh selection starts from the top
+  const remainingText = startOffset > 0 ? text.slice(startOffset) : text;
+  if (startOffset > 0) showToast('從選取處開始朗讀');
 
   const savedLang = localStorage.getItem('tts_lang') || 'zh-TW';
   const savedVoiceName = localStorage.getItem('tts_voice') || '';
@@ -1534,12 +1641,41 @@ window.toggleTTS = () => {
     return;
   }
 
-  _ttsQueue = _splitForTTS(text);
+  // For mixed-language text, pick a secondary voice for the non-CJK runs so
+  // English words aren't read in a heavy Chinese accent. Only bother with
+  // this when the primary voice is itself Chinese — if the user's primary
+  // language is already English, there's nothing to switch to.
+  const primaryIsCJK = /^zh/i.test(savedLang);
+  let englishVoice = null;
+  if (primaryIsCJK) {
+    const enPreset = TTS_VOICES.find(p => p.lang === 'en-US');
+    englishVoice = (enPreset && _resolveVoice(enPreset)) || voices.find(v => /^en/i.test(v.lang)) || null;
+  }
+
+  // Build the speaking queue: split by script first (so each segment gets
+  // the right voice), then re-chunk each segment to stay under the length
+  // limit that keeps long network-voice requests from failing.
+  _ttsQueue = [];
+  if (primaryIsCJK && englishVoice) {
+    for (const run of _splitByScript(remainingText)) {
+      const useEnglish = !run.cjk;
+      const segVoice = useEnglish ? englishVoice : resolvedVoice;
+      const segLang = useEnglish ? englishVoice.lang : (resolvedVoice ? resolvedVoice.lang : savedLang);
+      for (const piece of _splitForTTS(run.text)) {
+        _ttsQueue.push({ text: piece, lang: segLang, voice: segVoice });
+      }
+    }
+  } else {
+    const lang = resolvedVoice ? resolvedVoice.lang : savedLang;
+    for (const piece of _splitForTTS(remainingText)) {
+      _ttsQueue.push({ text: piece, lang, voice: resolvedVoice });
+    }
+  }
+
   _ttsQueueIdx = 0;
   _ttsTotalLen = text.length;
-  _ttsCharsBefore = 0;
+  _ttsCharsBefore = startOffset;
   const rate = parseFloat(localStorage.getItem('tts_rate') || '1');
-  const lang = resolvedVoice ? resolvedVoice.lang : savedLang;
   const myGen = ++_ttsGen; // this run's identity
 
   let failCount = 0;
@@ -1547,11 +1683,11 @@ window.toggleTTS = () => {
   const speakNext = () => {
     if (myGen !== _ttsGen) return; // a newer run (or a stop) has superseded this one
     if (_ttsQueueIdx >= _ttsQueue.length) { stopTTS(); return; }
-    const chunk = _ttsQueue[_ttsQueueIdx];
-    const utter = new SpeechSynthesisUtterance(chunk);
-    utter.lang = lang;
+    const seg = _ttsQueue[_ttsQueueIdx];
+    const utter = new SpeechSynthesisUtterance(seg.text);
+    utter.lang = seg.lang;
     utter.rate = rate;
-    if (resolvedVoice) utter.voice = resolvedVoice;
+    if (seg.voice) utter.voice = seg.voice;
     utter.onstart = () => {
       if (myGen !== _ttsGen) return;
       ttsPlaying = true;
@@ -1562,23 +1698,23 @@ window.toggleTTS = () => {
     utter.onerror = (e) => {
       if (myGen !== _ttsGen) return;
       failCount++;
-      console.error('[TTS] chunk failed:', e?.error, chunk.slice(0, 30));
+      console.error('[TTS] segment failed:', e?.error, seg.text.slice(0, 30));
       if (failCount === 1 && _ttsQueueIdx === 0) {
-        // First chunk failed outright — almost certainly a voice/lang problem,
+        // First segment failed outright — almost certainly a voice/lang problem,
         // not a one-off network blip. Stop instead of silently limping through.
         showToast('朗讀失敗，請到設定 > 朗讀 確認語言／人聲設定');
         stopTTS();
         return;
       }
-      // Mid-article failure: skip this chunk and keep going so one bad
+      // Mid-article failure: skip this segment and keep going so one bad
       // sentence doesn't silence the rest of the article.
-      _ttsCharsBefore += chunk.length;
+      _ttsCharsBefore += seg.text.length;
       _ttsQueueIdx++;
       speakNext();
     };
     utter.onend = () => {
       if (myGen !== _ttsGen) return;
-      _ttsCharsBefore += chunk.length;
+      _ttsCharsBefore += seg.text.length;
       _ttsQueueIdx++;
       const pct = Math.min(100, Math.round((_ttsCharsBefore / _ttsTotalLen) * 100));
       document.getElementById('tts-progress-bar').style.width = pct + '%';

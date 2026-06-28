@@ -147,6 +147,7 @@
       </button>
       <div class="tb-spacer"></div>
       <!-- Right side -->
+      <button class="tb-btn" id="tb-fontsize-btn" onclick="toggleTbDropdown('fontsize-dropdown')" title="字體大小">Aa</button>
       <button class="tb-btn" id="tb-highlight-btn" onclick="toggleHighlightMode()" title="Highlight 重點">🪄</button>
       <button class="tb-btn" id="tb-md-btn" onclick="toggleReadingMd()" title="編輯模式">📝</button>
       <button class="tb-btn" id="tb-notes-btn" onclick="toggleNotesPane()" title="筆記欄">✒️</button>
@@ -178,6 +179,15 @@
       <div class="tb-dropdown-label">選擇資料夾</div>
       <div id="folder-dropdown-list"></div>
     </div>
+    <!-- Font size dropdown -->
+    <div class="tb-dropdown right" id="fontsize-dropdown">
+      <div class="tb-dropdown-label">字體大小</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:6px 4px;">
+        <button class="font-ctrl-btn" onclick="changeFontSize(-1)" title="縮小字體">－</button>
+        <span id="reading-font-size-label">16</span>
+        <button class="font-ctrl-btn" onclick="changeFontSize(1)" title="放大字體">＋</button>
+      </div>
+    </div>
   </div>
 
   <!-- Title bar -->
@@ -191,17 +201,18 @@
         <input class="reading-author-input" id="reading-author-input" placeholder="未填寫" oninput="scheduleFieldSave('author', this.value)" />
       </div>
     </div>
+    <div class="new-url-row" id="reading-url-row">
+      <a id="reading-url-open" href="#" target="_blank" rel="noopener" title="開啟原始連結" style="display:none;flex:0 0 auto;color:var(--text3);line-height:0;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </a>
+      <input class="new-url-input" id="reading-url-input" placeholder="來源網址（選填）" type="url" oninput="scheduleFieldSave('url', this.value); window.syncReadingUrlLink()" />
+    </div>
   </div>
 
   <!-- Body + Notes -->
   <div class="reading-body-wrap">
     <div class="reading-body-pane" id="reading-body-pane">
       <div id="reading-body-content"></div>
-      <div id="reading-font-controls">
-        <button class="font-ctrl-btn" onclick="changeFontSize(-1)" title="縮小字體">－</button>
-        <span id="reading-font-size-label">16</span>
-        <button class="font-ctrl-btn" onclick="changeFontSize(1)" title="放大字體">＋</button>
-      </div>
     </div>
     <div class="reading-notes-pane" id="reading-notes-pane">
       <div class="notes-pane-label" style="justify-content:space-between">
@@ -420,16 +431,22 @@ if ('serviceWorker' in navigator) {
       const reg = await navigator.serviceWorker.register('./sw.js');
       console.log('[PWA] SW registered:', reg.scope);
 
-      // 偵測到新版 SW 等待中 → 顯示更新提示
+      let updateApplied = false;
+      const applyUpdate = () => {
+        if (updateApplied) return;
+        updateApplied = true;
+        navigator.serviceWorker.controller?.postMessage('SKIP_WAITING');
+      };
+
+      // 偵測到新版 SW 等待中 → 顯示更新提示，並在短暫延遲後自動套用，
+      // 避免使用者沒注意到提示就一直卡在舊版本。
       const showUpdateBanner = () => {
+        if (document.getElementById('pwa-update-banner')) return;
         const banner = document.createElement('div');
         banner.id = 'pwa-update-banner';
         banner.innerHTML = `
-          <span>🆕 新版本已就緒</span>
-          <button onclick="
-            navigator.serviceWorker.controller?.postMessage('SKIP_WAITING');
-            window.location.reload();
-          ">立即更新</button>
+          <span>🆕 新版本已就緒（5 秒後自動更新）</span>
+          <button id="pwa-update-now-btn">立即更新</button>
         `;
         Object.assign(banner.style, {
           position:'fixed', bottom:'20px', left:'50%',
@@ -442,7 +459,10 @@ if ('serviceWorker' in navigator) {
         });
         banner.querySelector('button').style.cssText =
           'background:#fff;color:#4F6EF7;border:none;border-radius:8px;padding:4px 12px;cursor:pointer;font-weight:600;font-size:13px';
+        banner.querySelector('button').onclick = applyUpdate;
         document.body.appendChild(banner);
+        // 自動套用，不依賴使用者一定會點按鈕、看到提示
+        setTimeout(applyUpdate, 5000);
       };
 
       if (reg.waiting) showUpdateBanner();
@@ -461,6 +481,15 @@ if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (!refreshing) { refreshing = true; window.location.reload(); }
       });
+
+      // 主動檢查更新：瀏覽器不一定會自己即時檢查 sw.js 是否有變動，
+      // 這裡每次回到分頁、以及每 10 分鐘，都主動問一次有沒有新版本。
+      const checkForUpdate = () => reg.update().catch(() => {});
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') checkForUpdate();
+      });
+      setInterval(checkForUpdate, 10 * 60 * 1000);
+      checkForUpdate();
     } catch (err) {
       console.error('[PWA] SW registration failed:', err);
     }

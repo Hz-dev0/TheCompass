@@ -224,20 +224,8 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 }
 .reading-title-bar { position: relative; }
 
-/* ── Font size float ── */
-#reading-font-controls {
-  position: absolute; bottom: 18px; right: 18px;
-  z-index: 20;
-  display: flex; align-items: center; gap: 2px;
-  background: rgba(255,255,255,0.88); backdrop-filter: blur(10px);
-  border: 1px solid var(--border); border-radius: 20px;
-  padding: 3px 6px; box-shadow: var(--shadow);
-  opacity: 0; transition: opacity 0.2s;
-  pointer-events: none;
-  width: max-content;
-}
-#reading-body-pane:hover #reading-font-controls,
-#reading-font-controls:hover { opacity: 1; pointer-events: auto; }
+/* Font size controls now live in the toolbar dropdown (#fontsize-dropdown);
+   .font-ctrl-btn / #reading-font-size-label styles are reused there. */
 .font-ctrl-btn {
   width: 24px; height: 24px; border: none; background: transparent;
   cursor: pointer; color: var(--text2); font-size: 14px; font-weight: 600;
@@ -721,6 +709,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 .tb-dropdown.open { display: flex; }
 .tb-dropdown.left { left: 8px; }
 .tb-dropdown.right { right: 8px; }
+#fontsize-dropdown { min-width: 120px; }
 .tb-dropdown-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; padding: 4px 6px 2px; }
 .tb-drop-item {
   display: flex; align-items: center; gap: 7px; padding: 6px 8px;
