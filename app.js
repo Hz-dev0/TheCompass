@@ -1341,125 +1341,96 @@ window.togglePin = async () => {
 };
 
 // ── TTS ──
-// 三個固定人聲 — 用關鍵字模糊比對，相容不同 Chrome 版本與 OS
+// 保持模糊比對，但加入更寬鬆的語系判定
 const TTS_VOICES = [
-  { label: '台灣中文', match: v => v.lang === 'zh-TW' && v.name.toLowerCase().includes('google'), lang: 'zh-TW' },
-  { label: '中國大陸', match: v => v.lang === 'zh-CN' && v.name.toLowerCase().includes('google'), lang: 'zh-CN' },
-  { label: 'English',  match: v => v.lang === 'en-US' && v.name.toLowerCase().includes('google'), lang: 'en-US' },
+  { label: '台灣中文', match: v => v.lang.includes('zh-TW'), lang: 'zh-TW' },
+  { label: '中國大陸', match: v => v.lang.includes('zh-CN'), lang: 'zh-CN' },
+  { label: 'English',  match: v => v.lang.startsWith('en-'), lang: 'en-US' },
 ];
 
-// 快取 voices，onvoiceschanged 時更新（部分瀏覽器 getVoices 首次為空）
 let _cachedVoices = [];
 function _getVoices() {
+  if (typeof speechSynthesis === 'undefined') return [];
   const v = speechSynthesis.getVoices();
   if (v.length) _cachedVoices = v;
   return _cachedVoices;
 }
-speechSynthesis.onvoiceschanged = () => { _cachedVoices = speechSynthesis.getVoices(); };
-// 觸發一次確保盡早快取
-if (typeof speechSynthesis !== 'undefined') _getVoices();
 
-function _resolveVoice(preset) {
-  return _getVoices().find(preset.match) || null;
+if (typeof speechSynthesis !== 'undefined') {
+  _getVoices();
+  speechSynthesis.onvoiceschanged = () => { _cachedVoices = speechSynthesis.getVoices(); };
 }
 
-window.openTTSMenu = (e) => {
-  e.preventDefault();
-  const menu = document.getElementById('tts-menu');
-  const savedLang = localStorage.getItem('tts_lang') || 'zh-TW';
-  const rate = parseFloat(localStorage.getItem('tts_rate') || '1');
-
-  // Voice pills
-  const pillsDiv = document.getElementById('tts-voice-pills');
-  pillsDiv.innerHTML = '';
-  TTS_VOICES.forEach((preset) => {
-    const voice = _resolveVoice(preset);
-    const available = !!voice;
-    const active = savedLang === preset.lang && available;
-    const displayName = voice ? voice.name : preset.label + ' (不支援)';
-    const btn = document.createElement('button');
-    btn.textContent = displayName;
-    btn.disabled = !available;
-    btn.dataset.lang = preset.lang;
-    btn.style.cssText = `width:100%;padding:6px 10px;text-align:left;font-size:12px;border-radius:var(--radius);cursor:${available?'pointer':'default'};border:1px solid ${active?'var(--accent)':'var(--border2)'};background:${active?'var(--accent-light)':'transparent'};color:${active?'var(--accent)':available?'var(--text2)':'var(--text3)'};font-family:var(--font-sans);opacity:${available?1:0.5}`;
-    btn.onclick = () => {
-      if (!available || !voice) return;
-      localStorage.setItem('tts_voice', voice.name);
-      localStorage.setItem('tts_lang', preset.lang);
-      pillsDiv.querySelectorAll('button').forEach(b => {
-        const isActive = b.dataset.lang === preset.lang;
-        b.style.borderColor = isActive ? 'var(--accent)' : 'var(--border2)';
-        b.style.background  = isActive ? 'var(--accent-light)' : 'transparent';
-        b.style.color       = isActive ? 'var(--accent)' : 'var(--text2)';
-      });
-    };
-    pillsDiv.appendChild(btn);
-  });
-
-  // Speed
-  document.getElementById('tts-speed-slider').value = rate;
-  document.getElementById('tts-speed-display').textContent = rate.toFixed(1) + 'x';
-
-  // Position: clamp to viewport
-  menu.style.display = 'block';
-  const mW = menu.offsetWidth || 200;
-  const mH = menu.offsetHeight || 180;
-  let x = e.clientX;
-  let y = e.clientY + 8;
-  if (x + mW + 8 > window.innerWidth) x = window.innerWidth - mW - 8;
-  if (x < 8) x = 8;
-  if (y + mH + 8 > window.innerHeight) y = e.clientY - mH - 8;
-  if (y < 8) y = 8;
-  menu.style.left = x + 'px';
-  menu.style.top = y + 'px';
-};
-
-window.onTTSSpeedChange = (val) => {
-  const r = parseFloat(val);
-  localStorage.setItem('tts_rate', r);
-  document.getElementById('tts-speed-display').textContent = r.toFixed(1) + 'x';
-  // If currently playing, restart with new rate
-  if (ttsUtterance && ttsPlaying) { speechSynthesis.cancel(); window.toggleTTS(); }
-};
-document.addEventListener('click', e => {
-  const menu = document.getElementById('tts-menu');
-  if (menu && !menu.contains(e.target) && e.target.id !== 'tb-tts-btn') menu.style.display = 'none';
-});
+function _resolveVoice(preset) {
+  const all = _getVoices();
+  // 優先找名字包含 google 的優質語音，找不到就找任何符合該語系的語音
+  return all.find(v => preset.match(v) && v.name.toLowerCase().includes('google')) || all.find(preset.match) || null;
+}
 
 window.toggleTTS = () => {
   if (ttsPlaying) { stopTTS(); return; }
+  
   const art = articles.find(a => a.id === currentArticleId);
-  if (!art) return;
-  // Resolve voice by saved lang (fuzzy match Google voice)
+  if (!art || !art.body) { showToast('沒有可朗讀的內容'); return; }
+
+  // 1. 播放前先確保取消所有正在排隊的語音（防止卡死）
+  speechSynthesis.cancel(); 
+
   const savedLang = localStorage.getItem('tts_lang') || 'zh-TW';
   const preset = TTS_VOICES.find(p => p.lang === savedLang) || TTS_VOICES[0];
-  const text = (art.body || '');
-  const utter = new SpeechSynthesisUtterance(text);
+  
+  // 2. 建立朗讀實例
+  const utter = new SpeechSynthesisUtterance(art.body);
   utter.lang = preset.lang;
+  
   const rate = parseFloat(localStorage.getItem('tts_rate') || '1');
   utter.rate = rate;
+
+  // 3. 安全指派語音：找不到就留空，瀏覽器會自動用系統預設音，才不會沒聲音
   const resolvedVoice = _resolveVoice(preset);
-  if (resolvedVoice) utter.voice = resolvedVoice;
+  if (resolvedVoice) {
+    utter.voice = resolvedVoice;
+  }
+
   utter.onstart = () => {
     ttsPlaying = true;
     const btn = document.getElementById('tb-tts-btn');
     if (btn) { btn.classList.add('active'); btn.textContent = '⏹'; }
-    document.getElementById('tts-progress').classList.add('active');
+    const prog = document.getElementById('tts-progress');
+    if (prog) prog.classList.add('active');
   };
-  utter.onend = utter.onerror = () => {
+
+  utter.onend = () => {
     ttsPlaying = false;
     const btn = document.getElementById('tb-tts-btn');
     if (btn) { btn.classList.remove('active'); btn.textContent = '🔊'; }
-    document.getElementById('tts-progress').classList.remove('active');
+    const prog = document.getElementById('tts-progress');
+    if (prog) prog.classList.remove('active');
     document.getElementById('tts-progress-bar').style.width = '0%';
   };
+
+  utter.onerror = (e) => {
+    console.error('TTS 播放出錯:', e);
+    ttsPlaying = false;
+    const btn = document.getElementById('tb-tts-btn');
+    if (btn) { btn.classList.remove('active'); btn.textContent = '🔊'; }
+    // 如果是因為被瀏覽器攔截，提示使用者
+    if (e.error === 'not-allowed') {
+      showToast('播放被瀏覽器攔截，請再點擊一次');
+    }
+  };
+
   utter.onboundary = (e) => {
     if (utter.text.length > 0) {
       const pct = Math.round((e.charIndex / utter.text.length) * 100);
-      document.getElementById('tts-progress-bar').style.width = pct + '%';
+      const pb = document.getElementById('tts-progress-bar');
+      if (pb) pb.style.width = pct + '%';
     }
   };
+
   ttsUtterance = utter;
+  
+  // 4. 正式播放
   speechSynthesis.speak(utter);
 };
 
