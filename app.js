@@ -299,7 +299,17 @@ function renderFolderTree() {
   allItem.addEventListener('drop', async e => {
     e.preventDefault(); allItem.classList.remove('drag-over');
     const artId = e.dataTransfer.getData('articleId');
-    if (artId) { await updateDoc(doc(db, 'articles', artId), { folderId: null }); showToast('已移出資料夾'); }
+    if (!artId) return;
+    const art = articles.find(a => a.id === artId);
+    const prevFolderId = art ? art.folderId : undefined;
+    if (art) { art.folderId = null; renderFolderTree(); renderArticleList(); }
+    showToast('已移出資料夾');
+    try {
+      await updateDoc(doc(db, 'articles', artId), { folderId: null });
+    } catch (err) {
+      if (art) { art.folderId = prevFolderId; renderFolderTree(); renderArticleList(); }
+      showToast('移動失敗：' + err.message);
+    }
   });
   tree.appendChild(allItem);
 
@@ -323,7 +333,17 @@ function renderFolderTree() {
   uncatItem.addEventListener('drop', async e => {
     e.preventDefault(); uncatItem.classList.remove('drag-over');
     const artId = e.dataTransfer.getData('articleId');
-    if (artId) { await updateDoc(doc(db, 'articles', artId), { folderId: null }); showToast('已移至未分類'); }
+    if (!artId) return;
+    const art = articles.find(a => a.id === artId);
+    const prevFolderId = art ? art.folderId : undefined;
+    if (art) { art.folderId = null; renderFolderTree(); renderArticleList(); }
+    showToast('已移至未分類');
+    try {
+      await updateDoc(doc(db, 'articles', artId), { folderId: null });
+    } catch (err) {
+      if (art) { art.folderId = prevFolderId; renderFolderTree(); renderArticleList(); }
+      showToast('移動失敗：' + err.message);
+    }
   });
   tree.appendChild(uncatItem);
 
@@ -439,11 +459,16 @@ function renderFolderTree() {
         if (!artId) return;
         e.preventDefault();
         item.classList.remove('drag-over');
-        await updateDoc(doc(db, 'articles', artId), { folderId: folder.id });
-        showToast(`已移到「${folder.name}」`);
         const art = articles.find(a => a.id === artId);
-        if (art) art.folderId = folder.id;
-        renderFolderTree();
+        const prevFolderId = art ? art.folderId : undefined;
+        if (art) { art.folderId = folder.id; renderFolderTree(); renderArticleList(); }
+        showToast(`已移到「${folder.name}」`);
+        try {
+          await updateDoc(doc(db, 'articles', artId), { folderId: folder.id });
+        } catch (err) {
+          if (art) { art.folderId = prevFolderId; renderFolderTree(); renderArticleList(); }
+          showToast('移動失敗：' + err.message);
+        }
       });
     } else {
       // ── Normal mode: drag article onto folder OR drag folder to reorder (no nesting) ──
@@ -471,11 +496,16 @@ function renderFolderTree() {
         const artId = e.dataTransfer.getData('articleId');
         const srcFolderId = e.dataTransfer.getData('folderId');
         if (artId) {
-          await updateDoc(doc(db, 'articles', artId), { folderId: folder.id });
-          showToast(`已移到「${folder.name}」`);
           const art = articles.find(a => a.id === artId);
-          if (art) art.folderId = folder.id;
-          renderFolderTree();
+          const prevFolderId = art ? art.folderId : undefined;
+          if (art) { art.folderId = folder.id; renderFolderTree(); renderArticleList(); }
+          showToast(`已移到「${folder.name}」`);
+          try {
+            await updateDoc(doc(db, 'articles', artId), { folderId: folder.id });
+          } catch (err) {
+            if (art) { art.folderId = prevFolderId; renderFolderTree(); renderArticleList(); }
+            showToast('移動失敗：' + err.message);
+          }
         } else if (srcFolderId && srcFolderId !== folder.id) {
           // Pure reorder among siblings: insert above or below target
           const rect = item.getBoundingClientRect();
@@ -1042,7 +1072,14 @@ function inlineMarkdown(text) {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/\x60(.+?)\x60/g, '<code>$1</code>')
-    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank">$1</a>');
+    .replace(/\[(.+?)\]\((.+?)\)/g, (m, label, href) => {
+      // Block dangerous URL schemes (javascript:, data:, vbscript:, etc) so a
+      // malicious link pasted into article content can't execute script when
+      // clicked. Only allow http(s), mailto, and protocol-relative/relative URLs.
+      const safe = /^(https?:|mailto:|\/|#|\.)/i.test(href) || !/^[a-z][a-z0-9+.-]*:/i.test(href);
+      const finalHref = safe ? href : '#';
+      return `<a href="${finalHref}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    });
 }
 
 function renderBodyPane(art) {
@@ -1589,17 +1626,25 @@ window.toggleTTS = () => {
   if (ttsPlaying) { stopTTS(); return; }
   const art = articles.find(a => a.id === currentArticleId);
   if (!art) return;
-  const text = (art.body || '').trim();
+  const rawBody = art.body || '';
+  const text = rawBody.trim();
   if (!text) { showToast('這篇文章沒有內容可以朗讀'); return; }
+  // How many leading chars .trim() removed — needed to translate textarea
+  // offsets (measured against the untrimmed rawBody) into offsets within text.
+  const leadingTrimLen = rawBody.length - rawBody.replace(/^\s+/, '').length;
 
   // If the user has selected some text in the body, start reading from there.
   let startOffset = 0;
   let selectedText = _lastBodySelection;
+  let exactOffset = -1;
   // In edit mode the body is a <textarea>, which the Selection API can't see —
-  // check its native selectionStart/End instead.
+  // check its native selectionStart/End instead. This also gives us the exact
+  // offset directly, avoiding any ambiguity if the selected phrase repeats
+  // elsewhere in the article.
   const editorEl = document.getElementById('body-editor');
   if (editorEl && editorEl.selectionStart !== editorEl.selectionEnd) {
     selectedText = editorEl.value.slice(editorEl.selectionStart, editorEl.selectionEnd).trim();
+    exactOffset = Math.max(0, editorEl.selectionStart - leadingTrimLen);
   } else if (!selectedText) {
     const sel = window.getSelection();
     const bodyEl = document.getElementById('reading-body-content');
@@ -1607,10 +1652,16 @@ window.toggleTTS = () => {
       selectedText = sel.toString().trim();
     }
   }
-  if (selectedText) {
+  if (exactOffset !== -1) {
+    startOffset = exactOffset;
+  } else if (selectedText) {
     // Use the first ~24 chars as a search key — long enough to be a fairly
     // unique anchor point, short enough to tolerate minor whitespace/markdown
     // differences between the rendered DOM text and the raw markdown source.
+    // Note: if this exact phrase repeats earlier in the article, this will
+    // jump to the first occurrence rather than the one the user selected —
+    // an acceptable tradeoff since the Selection API doesn't give us a
+    // reliable raw-text offset to disambiguate in rendered (non-edit) mode.
     const key = selectedText.slice(0, 24);
     const idx = text.indexOf(key);
     if (idx !== -1) startOffset = idx;
@@ -1877,10 +1928,16 @@ window.confirmHighlight = async () => {
   if (!pendingHighlightText || !currentArticleId) return;
   const text = pendingHighlightText;
   exitHighlightMode();
-  await updateDoc(doc(db, 'articles', currentArticleId), { highlight: text });
   const art = articles.find(a => a.id === currentArticleId);
+  const prevHighlight = art ? art.highlight : undefined;
   if (art) { art.highlight = text; renderBodyPane(art); }
   showToast('Highlight 已儲存 🪄');
+  try {
+    await updateDoc(doc(db, 'articles', currentArticleId), { highlight: text });
+  } catch (e) {
+    if (art) { art.highlight = prevHighlight; renderBodyPane(art); }
+    showToast('Highlight 儲存失敗：' + e.message);
+  }
 };
 
 document.addEventListener('mouseup', (e) => {
