@@ -1341,7 +1341,11 @@ window.togglePin = async () => {
 };
 
 // ── TTS ──
-// 保持模糊比對，但加入更寬鬆的語系判定
+// =================================================================
+// 完整 TTS 語音朗讀模組 (包含語音優化、速度控制與安全防禦)
+// =================================================================
+
+// 1. 語音設定與語系宣告
 const TTS_VOICES = [
   { label: '台灣中文', match: v => v.lang.includes('zh-TW'), lang: 'zh-TW' },
   { label: '中國大陸', match: v => v.lang.includes('zh-CN'), lang: 'zh-CN' },
@@ -1349,6 +1353,10 @@ const TTS_VOICES = [
 ];
 
 let _cachedVoices = [];
+let ttsPlaying = false;
+let ttsUtterance = null;
+
+// 2. 獲取瀏覽器語音庫
 function _getVoices() {
   if (typeof speechSynthesis === 'undefined') return [];
   const v = speechSynthesis.getVoices();
@@ -1358,40 +1366,72 @@ function _getVoices() {
 
 if (typeof speechSynthesis !== 'undefined') {
   _getVoices();
-  speechSynthesis.onvoiceschanged = () => { _cachedVoices = speechSynthesis.getVoices(); };
+  // 監聽語音庫加載完成事件 (針對 Chrome/邊緣瀏覽器優化)
+  speechSynthesis.onvoiceschanged = () => { 
+    _cachedVoices = speechSynthesis.getVoices(); 
+  };
 }
 
+// 3. 模糊比對適合的語音人聲
 function _resolveVoice(preset) {
   const all = _getVoices();
-  // 優先找名字包含 google 的優質語音，找不到就找任何符合該語系的語音
-  return all.find(v => preset.match(v) && v.name.toLowerCase().includes('google')) || all.find(preset.match) || null;
+  // 優先尋找 Google 的優質人聲，找不到則尋找該語系的任何聲音，最差情況回傳 null (使用系統預設)
+  return all.find(v => preset.match(v) && v.name.toLowerCase().includes('google')) || 
+         all.find(preset.match) || 
+         null;
 }
 
-window.toggleTTS = () => {
-  if (ttsPlaying) { stopTTS(); return; }
+// 4. 停止播放功能
+window.stopTTS = () => {
+  if (typeof speechSynthesis !== 'undefined') {
+    speechSynthesis.cancel();
+  }
+  ttsPlaying = false;
   
-  const art = articles.find(a => a.id === currentArticleId);
-  if (!art || !art.body) { showToast('沒有可朗讀的內容'); return; }
+  // 還原介面按鈕與進度條狀態
+  const btn = document.getElementById('tb-tts-btn');
+  if (btn) { btn.classList.remove('active'); btn.textContent = '🔊'; }
+  const prog = document.getElementById('tts-progress');
+  if (prog) prog.classList.remove('active');
+  const pb = document.getElementById('tts-progress-bar');
+  if (pb) pb.style.width = '0%';
+};
 
-  // 1. 播放前先確保取消所有正在排隊的語音（防止卡死）
+// 5. 播放 / 暫停 切換主功能
+window.toggleTTS = () => {
+  // 如果目前正在播，點擊就是停止
+  if (ttsPlaying) { 
+    stopTTS(); 
+    return; 
+  }
+  
+  // 檢查是否有目前文章內容 (請確保 currentArticleId 與 articles 變數在全域可存取)
+  const art = articles.find(a => a.id === currentArticleId);
+  if (!art || !art.body) { 
+    if (typeof showToast === 'function') showToast('沒有可朗讀的內容');
+    return; 
+  }
+
+  // 播放前先確保清除上一次的排隊，避免卡死
   speechSynthesis.cancel(); 
 
+  // 讀取設定的語系與速度
   const savedLang = localStorage.getItem('tts_lang') || 'zh-TW';
   const preset = TTS_VOICES.find(p => p.lang === savedLang) || TTS_VOICES[0];
+  const rate = parseFloat(localStorage.getItem('tts_rate') || '1');
   
-  // 2. 建立朗讀實例
+  // 建立朗讀實例
   const utter = new SpeechSynthesisUtterance(art.body);
   utter.lang = preset.lang;
-  
-  const rate = parseFloat(localStorage.getItem('tts_rate') || '1');
   utter.rate = rate;
 
-  // 3. 安全指派語音：找不到就留空，瀏覽器會自動用系統預設音，才不會沒聲音
+  // 指派優化語音
   const resolvedVoice = _resolveVoice(preset);
   if (resolvedVoice) {
     utter.voice = resolvedVoice;
   }
 
+  // 狀態監聽：開始播放
   utter.onstart = () => {
     ttsPlaying = true;
     const btn = document.getElementById('tb-tts-btn');
@@ -1400,26 +1440,21 @@ window.toggleTTS = () => {
     if (prog) prog.classList.add('active');
   };
 
+  // 狀態監聽：播放結束
   utter.onend = () => {
-    ttsPlaying = false;
-    const btn = document.getElementById('tb-tts-btn');
-    if (btn) { btn.classList.remove('active'); btn.textContent = '🔊'; }
-    const prog = document.getElementById('tts-progress');
-    if (prog) prog.classList.remove('active');
-    document.getElementById('tts-progress-bar').style.width = '0%';
+    stopTTS();
   };
 
+  // 狀態監聽：播放錯誤處理
   utter.onerror = (e) => {
     console.error('TTS 播放出錯:', e);
-    ttsPlaying = false;
-    const btn = document.getElementById('tb-tts-btn');
-    if (btn) { btn.classList.remove('active'); btn.textContent = '🔊'; }
-    // 如果是因為被瀏覽器攔截，提示使用者
-    if (e.error === 'not-allowed') {
+    stopTTS();
+    if (e.error === 'not-allowed' && typeof showToast === 'function') {
       showToast('播放被瀏覽器攔截，請再點擊一次');
     }
   };
 
+  // 狀態監聽：更新文字進度條
   utter.onboundary = (e) => {
     if (utter.text.length > 0) {
       const pct = Math.round((e.charIndex / utter.text.length) * 100);
@@ -1430,8 +1465,19 @@ window.toggleTTS = () => {
 
   ttsUtterance = utter;
   
-  // 4. 正式播放
+  // 執行朗讀
   speechSynthesis.speak(utter);
+};
+
+// 6. 調整語速功能 (供介面滑桿或按鈕呼叫)
+window.changeTTSRate = (newRate) => {
+  localStorage.setItem('tts_rate', newRate);
+  
+  // 如果正在播放，即時重播以套用新語速
+  if (ttsPlaying) {
+    stopTTS();
+    setTimeout(() => { toggleTTS(); }, 100);
+  }
 };
 
 function stopTTS() {
