@@ -1,5 +1,5 @@
 --- TheCompass-main/TheCompass-main/app.js	2026-06-27 16:51:14.000000000 +0000
-+++ fix/TheCompass/app.js	2026-06-28 12:13:05.501784207 +0000
++++ fix/TheCompass/app.js	2026-06-28 12:16:15.249147160 +0000
 @@ -822,6 +822,7 @@
  let titleBarVisible = true;
  let ttsUtterance = null;
@@ -19,7 +19,35 @@
    // Body
    renderBodyPane(art);
    // Notes
-@@ -1270,9 +1275,19 @@
+@@ -1245,11 +1250,26 @@
+ 
+ // ── Tag dropdown ──
+ function renderTagDropdown(art) {
++  const dropdown = document.getElementById('tag-dropdown');
++  let selectedWrap = document.getElementById('tag-dropdown-selected');
++  if (!selectedWrap) {
++    selectedWrap = document.createElement('div');
++    selectedWrap.id = 'tag-dropdown-selected';
++    selectedWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 4px;';
++    const input = document.getElementById('tag-new-input');
++    dropdown.insertBefore(selectedWrap, input);
++  }
++  const curTags = art.tags || [];
++  selectedWrap.innerHTML = curTags.map(t =>
++    `<span class="reading-meta-tag" onclick="removeTagFromArticle('${escHtml(t)}')">${escHtml(t)} ×</span>`
++  ).join('');
++  selectedWrap.style.display = curTags.length ? 'flex' : 'none';
++
+   const list = document.getElementById('tag-dropdown-list');
+   const allTags = new Set(articles.flatMap(a => a.tags||[]));
+   list.innerHTML = '';
+   [...allTags].sort().forEach(tag => {
+-    const hasTag = (art.tags||[]).includes(tag);
++    const hasTag = curTags.includes(tag);
+     const item = document.createElement('div');
+     item.className = 'tb-drop-item' + (hasTag ? ' active' : '');
+     item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> ${escHtml(tag)}`;
+@@ -1270,9 +1290,19 @@
    if (!art) return;
    const tags = art.tags || [];
    const newTags = tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag];
@@ -42,7 +70,7 @@
  }
  
  window.removeTagFromArticle = async (tag) => {
-@@ -1297,12 +1312,24 @@
+@@ -1297,12 +1327,24 @@
    });
  }
  
@@ -71,7 +99,7 @@
  
  // ── Read status (2 states: 待閱🔲 / 已閱☑️) ──
  window.toggleReadStatus = async () => {
-@@ -1419,57 +1446,151 @@
+@@ -1419,57 +1461,151 @@
    localStorage.setItem('tts_rate', r);
    document.getElementById('tts-speed-display').textContent = r.toFixed(1) + 'x';
    // If currently playing, restart with new rate
@@ -251,7 +279,7 @@
  }
  
  // ── Mobile toolbar auto-hide ──
-@@ -1691,7 +1812,7 @@
+@@ -1691,11 +1827,25 @@
    ).join('');
    if (newFolderId) {
      const f = folders.find(f => f.id === newFolderId);
@@ -260,7 +288,25 @@
    }
  }
  
-@@ -1723,6 +1844,8 @@
+ function renderNewTagDropdown() {
++  const dropdown = document.getElementById('new-tag-dropdown');
++  let selectedWrap = document.getElementById('new-tag-selected');
++  if (!selectedWrap) {
++    selectedWrap = document.createElement('div');
++    selectedWrap.id = 'new-tag-selected';
++    selectedWrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 4px;';
++    const input = document.getElementById('new-tag-input');
++    dropdown.insertBefore(selectedWrap, input);
++  }
++  selectedWrap.innerHTML = newTags.map(t =>
++    `<span class="reading-meta-tag" onclick="removeNewTag('${escHtml(t)}')">${escHtml(t)} ×</span>`
++  ).join('');
++  selectedWrap.style.display = newTags.length ? 'flex' : 'none';
++
+   const list = document.getElementById('new-tag-list');
+   const allTags = new Set(articles.flatMap(a => a.tags||[]));
+   list.innerHTML = '';
+@@ -1723,6 +1873,8 @@
  
  window.removeNewTag = (tag) => { newTags = newTags.filter(t => t !== tag); renderNewMetaRow(); renderNewTagDropdown(); };
  
@@ -269,7 +315,7 @@
  function renderNewFolderDropdown() {
    const list = document.getElementById('new-folder-list');
    list.innerHTML = '';
-@@ -1980,6 +2103,7 @@
+@@ -1980,6 +2132,7 @@
    if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
  });
  
@@ -277,7 +323,7 @@
  function renderSettingsBody() {
    const body = document.getElementById('settings-body');
    if (currentSettingsTab === 'export') {
-@@ -2058,7 +2182,7 @@
+@@ -2058,7 +2211,7 @@
        </div>` : ''}
        <div class="settings-row" style="margin-top:4px">
          <label></label>
