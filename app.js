@@ -1673,6 +1673,47 @@ function _splitByScript(text) {
   return collapsed.filter(r => r.text.trim());
 }
 
+// Strip markdown syntax before speaking. art.body is raw markdown source —
+// without this, the speech engine reads symbols like #, **, -, [text](url)
+// literally (e.g. "hashtag", "asterisk asterisk", "bracket"), which is
+// confusing and unpleasant to listen to.
+function _stripMarkdownForSpeech(text) {
+  return text
+    // Code blocks: drop entirely (reading code aloud isn't useful)
+    .replace(/```[\s\S]*?```/g, '')
+    // Inline code: keep content, drop backticks
+    .replace(/`([^`]+)`/g, '$1')
+    // Images: drop entirely (alt text rarely makes sense spoken aloud)
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '')
+    // Links: keep the label, drop the URL
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    // Bold/italic/strikethrough markers — keep content
+    .replace(/\*\*\*(.+?)\*\*\*/g, '$1')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/___(.+?)___/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    .replace(/(?<!\w)_(.+?)_(?!\w)/g, '$1')
+    .replace(/~~(.+?)~~/g, '$1')
+    // Headers: drop leading #'s
+    .replace(/^#{1,6}\s+/gm, '')
+    // Blockquote markers
+    .replace(/^>\s?/gm, '')
+    // Horizontal rules
+    .replace(/^(-{3,}|\*{3,}|_{3,})$/gm, '')
+    // List bullets (-, *, +) at line start
+    .replace(/^[ \t]*[-*+]\s+/gm, '')
+    // Ordered list numbers
+    .replace(/^[ \t]*\d+\.\s+/gm, '')
+    // Table pipes/separator rows
+    .replace(/\|/g, ' ')
+    .replace(/^[\s:-]+$/gm, '')
+    // Collapse leftover excess whitespace from removed syntax
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 window.toggleTTS = () => {
   if (ttsPlaying) { stopTTS(); return; }
   const art = articles.find(a => a.id === currentArticleId);
@@ -1718,8 +1759,14 @@ window.toggleTTS = () => {
     if (idx !== -1) startOffset = idx;
   }
   _lastBodySelection = ''; // consumed — next play() without a fresh selection starts from the top
-  const remainingText = startOffset > 0 ? text.slice(startOffset) : text;
+  const remainingTextRaw = startOffset > 0 ? text.slice(startOffset) : text;
   if (startOffset > 0) showToast('從選取處開始朗讀');
+  // Strip markdown on the whole remaining text at once — doing this before
+  // any splitting matters, because syntax like **bold** or [text](url) can
+  // span what would otherwise become separate script/length-chunk boundaries,
+  // and the strip patterns need to see the full markers to match correctly.
+  const remainingText = _stripMarkdownForSpeech(remainingTextRaw);
+  if (!remainingText) { showToast('這段內容沒有可朗讀的文字'); return; }
 
   const savedLang = localStorage.getItem('tts_lang') || 'zh-TW';
   const savedVoiceName = localStorage.getItem('tts_voice') || '';
@@ -1775,8 +1822,12 @@ window.toggleTTS = () => {
   }
 
   _ttsQueueIdx = 0;
-  _ttsTotalLen = text.length;
-  _ttsCharsBefore = startOffset;
+  // Progress is now tracked against the stripped (spoken) text length, since
+  // markdown stripping changes the character count and we no longer have a
+  // clean way to map each spoken chunk back to a raw-text span.
+  const strippedPrefixLen = startOffset > 0 ? _stripMarkdownForSpeech(text.slice(0, startOffset)).length : 0;
+  _ttsTotalLen = remainingText.length + strippedPrefixLen;
+  _ttsCharsBefore = strippedPrefixLen;
   const rate = parseFloat(localStorage.getItem('tts_rate') || '1');
   const myGen = ++_ttsGen; // this run's identity
 
