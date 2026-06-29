@@ -627,6 +627,15 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 }
 .reading-author-input:focus { border-bottom-color: var(--accent); }
 .reading-author-input::placeholder { color: var(--text3); }
+.reading-url-icon-btn {
+  flex-shrink: 0; width: 28px; height: 28px; margin-top: 2px;
+  border: none; background: transparent; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; color: var(--text3);
+  transition: background var(--transition), color var(--transition);
+}
+.reading-url-icon-btn:hover { background: var(--surface2); color: var(--text2); }
+.reading-url-icon-btn.has-url { color: var(--accent); }
 .reading-meta-row { display: flex; align-items: center; gap: 6px; padding: 7px 0 4px; flex-wrap: wrap; margin-bottom: 10px; min-height: 34px; }
 .reading-meta-tag {
   font-size: 11px; padding: 2px 8px; border-radius: 20px;

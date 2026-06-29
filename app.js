@@ -1177,16 +1177,67 @@ window.scheduleFieldSave = (field, value) => {
 
 window.syncReadingUrlLink = () => {
   const input = document.getElementById('reading-url-input');
-  const link = document.getElementById('reading-url-open');
-  if (!input || !link) return;
-  const val = input.value.trim();
+  const btn = document.getElementById('reading-url-icon');
+  if (!input || !btn) return;
+  btn.classList.toggle('has-url', !!input.value.trim());
+};
+
+function _normalizeUrl(val) {
+  val = (val || '').trim();
+  if (!val) return '';
+  return /^https?:\/\//i.test(val) ? val : 'https://' + val;
+}
+
+window.openReadingUrl = (e) => {
+  e.preventDefault();
+  const input = document.getElementById('reading-url-input');
+  const val = input ? input.value.trim() : '';
   if (val) {
-    link.href = /^https?:\/\//i.test(val) ? val : 'https://' + val;
-    link.style.display = 'inline-flex';
+    window.open(_normalizeUrl(val), '_blank', 'noopener');
   } else {
-    link.style.display = 'none';
+    // No URL set yet — left-click with nothing to open just opens the editor.
+    window.openUrlEditPopup(e);
   }
 };
+
+window.openUrlEditPopup = (e) => {
+  e.preventDefault();
+  const popup = document.getElementById('url-edit-popup');
+  const input = document.getElementById('url-edit-popup-input');
+  const sourceInput = document.getElementById('reading-url-input');
+  input.value = sourceInput ? sourceInput.value : '';
+  popup.style.display = 'block';
+  // Position near the icon button, clamped to viewport
+  const btn = document.getElementById('reading-url-icon');
+  const rect = btn.getBoundingClientRect();
+  const popupWidth = 280;
+  let left = rect.left;
+  if (left + popupWidth > window.innerWidth - 12) left = window.innerWidth - popupWidth - 12;
+  popup.style.left = Math.max(12, left) + 'px';
+  popup.style.top = (rect.bottom + 6) + 'px';
+  setTimeout(() => { input.focus(); input.select(); }, 30);
+};
+
+window.closeUrlEditPopup = () => {
+  document.getElementById('url-edit-popup').style.display = 'none';
+};
+
+window.saveUrlEditPopup = () => {
+  const newVal = document.getElementById('url-edit-popup-input').value.trim();
+  const sourceInput = document.getElementById('reading-url-input');
+  if (sourceInput) sourceInput.value = newVal;
+  window.syncReadingUrlLink();
+  window.closeUrlEditPopup();
+  window.scheduleFieldSave('url', newVal);
+};
+
+document.addEventListener('click', e => {
+  const popup = document.getElementById('url-edit-popup');
+  if (popup && popup.style.display === 'block' &&
+      !e.target.closest('#url-edit-popup') && !e.target.closest('#reading-url-icon')) {
+    window.closeUrlEditPopup();
+  }
+});
 
 window.scheduleNotesSave = (value) => {
   clearTimeout(saveTimeout);

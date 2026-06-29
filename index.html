@@ -200,12 +200,20 @@
         <span class="reading-author-label">作者</span>
         <input class="reading-author-input" id="reading-author-input" placeholder="未填寫" oninput="scheduleFieldSave('author', this.value)" />
       </div>
+      <button class="reading-url-icon-btn" id="reading-url-icon" onclick="window.openReadingUrl(event)" oncontextmenu="window.openUrlEditPopup(event)" title="來源連結（右鍵編輯）">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      </button>
+      <input type="hidden" id="reading-url-input" />
     </div>
-    <div class="new-url-row" id="reading-url-row">
-      <a id="reading-url-open" href="#" target="_blank" rel="noopener" title="開啟原始連結" style="display:none;flex:0 0 auto;color:var(--text3);line-height:0;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-      </a>
-      <input class="new-url-input" id="reading-url-input" placeholder="來源網址（選填）" type="url" oninput="scheduleFieldSave('url', this.value); window.syncReadingUrlLink()" />
+
+    <!-- URL edit popup (right-click the link icon) -->
+    <div id="url-edit-popup" style="position:fixed;z-index:900;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:12px;display:none;min-width:260px;max-width:92vw">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">來源網址</div>
+      <input class="new-url-input" id="url-edit-popup-input" placeholder="貼上原始文章網址…" type="url" style="border:1px solid var(--border2);border-radius:var(--radius);padding:6px 8px;width:100%;box-sizing:border-box;font-size:13px;color:var(--text2)" onkeydown="if(event.key==='Enter')window.saveUrlEditPopup(); if(event.key==='Escape')window.closeUrlEditPopup();" />
+      <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:10px">
+        <button onclick="window.closeUrlEditPopup()" style="background:transparent;color:var(--text3);border:none;border-radius:8px;padding:5px 10px;cursor:pointer;font-size:12px;font-family:var(--font-sans)">取消</button>
+        <button onclick="window.saveUrlEditPopup()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:5px 12px;cursor:pointer;font-size:12px;font-family:var(--font-sans)">儲存</button>
+      </div>
     </div>
   </div>
 
