@@ -207,6 +207,8 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .folder-item svg { width: 14px; height: 14px; flex-shrink: 0; }
 .folder-item .count { margin-left: auto; font-size: 11px; color: var(--text3); line-height: 1; flex-shrink: 0; }
 .folder-item.folder-empty { opacity: 0.6; }
+.folder-item.folder-hidden-default { opacity: 0.7; }
+.folder-hidden-badge { font-size: 10px; opacity: 0.7; margin-left: 2px; }
 .folder-indent { padding-left: 22px; }
 .folder-back { color: var(--accent); font-size: 12px; }
 .folder-back svg { color: var(--accent); }
@@ -880,7 +882,7 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
 .ctx-menu {
   position: fixed; z-index: 700; background: var(--surface);
   border: 1px solid var(--border2); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg); padding: 6px; min-width: 140px;
+  box-shadow: var(--shadow-lg); padding: 6px; min-width: 168px;
   display: none; flex-direction: column; gap: 2px;
 }
 .ctx-menu.open { display: flex; }

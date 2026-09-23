@@ -291,8 +291,12 @@ function renderFolderTree() {
 
   // All articles item
   const allItem = document.createElement('div');
+  const hiddenFolderIdsForCount = new Set(folders.filter(f => f.hiddenFromDefault).map(f => f.id));
+  const visibleArticleCount = hiddenFolderIdsForCount.size
+    ? articles.filter(a => !a.folderId || !hiddenFolderIdsForCount.has(a.folderId)).length
+    : articles.length;
   allItem.className = 'folder-item' + (!currentFolderId ? ' active' : '');
-  allItem.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> 全部文章 <span class="count">${articles.length}</span>`;
+  allItem.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> 全部文章 <span class="count">${visibleArticleCount}</span>`;
   allItem.onclick = () => { currentFolderId = null; currentFolderPath = []; renderFolderTree(); renderArticleList(); };
   // drag over to remove folder assignment
   allItem.addEventListener('dragover', e => { e.preventDefault(); allItem.classList.add('drag-over'); });
@@ -406,11 +410,11 @@ function renderFolderTree() {
     const count = articles.filter(a => a.folderId === folder.id).length;
     const isEmpty = count === 0;
     const item = document.createElement('div');
-    item.className = 'folder-item' + (currentFolderId===folder.id ? ' active':'') + (isEmpty ? ' folder-empty' : '');
+    item.className = 'folder-item' + (currentFolderId===folder.id ? ' active':'') + (isEmpty ? ' folder-empty' : '') + (folder.hiddenFromDefault ? ' folder-hidden-default' : '');
     item.draggable = true;
     item.dataset.folderId = folder.id;
     item.dataset.folderIdx = idx;
-    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(folder.name)}${isEmpty ? '' : ` <span class="count">${count}</span>`}`;
+    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(folder.name)}${folder.hiddenFromDefault ? ' <span class="folder-hidden-badge" title="未顯示於預設列表">🙈</span>' : ''}${isEmpty ? '' : ` <span class="count">${count}</span>`}`;
     item.onclick = (e) => {
       if (item.classList.contains('folder-dragging') || folderMoveMode) return;
       currentFolderId = folder.id;
@@ -587,6 +591,11 @@ function getFilteredArticles() {
   // folder filter
   if (currentFolderId === '__uncat__') list = list.filter(a => !a.folderId);
   else if (currentFolderId) list = list.filter(a => a.folderId === currentFolderId);
+  else {
+    // Default ("全部") view: exclude articles whose folder is marked hidden-from-default
+    const hiddenFolderIds = new Set(folders.filter(f => f.hiddenFromDefault).map(f => f.id));
+    if (hiddenFolderIds.size) list = list.filter(a => !a.folderId || !hiddenFolderIds.has(a.folderId));
+  }
   // tag filter
   if (activeTag !== '__all__') list = list.filter(a => (a.tags||[]).includes(activeTag));
   // search
@@ -3051,8 +3060,20 @@ function openCtxMenu(e, type, id, name) {
   e.stopPropagation();
   ctxTarget = { type, id, name };
   const menu = document.getElementById('ctx-menu');
-  // Only show delete for folders; tags don't have a delete in this simple version
+  // Only show delete + default-visibility toggle for folders; tags don't have these in this simple version
   document.getElementById('ctx-delete-folder').style.display = type === 'folder' ? 'flex' : 'none';
+  const toggleItem = document.getElementById('ctx-toggle-default');
+  if (type === 'folder') {
+    toggleItem.style.display = 'flex';
+    const folder = folders.find(f => f.id === id);
+    const isHidden = !!folder?.hiddenFromDefault;
+    document.getElementById('ctx-toggle-default-label').textContent = isHidden ? '在預設列表顯示' : '從預設列表隱藏';
+    document.getElementById('ctx-toggle-default-icon').innerHTML = isHidden
+      ? '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.8 21.8 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.8 21.8 0 0 1-2.34 3.5M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
+      : '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>';
+  } else {
+    toggleItem.style.display = 'none';
+  }
   menu.classList.add('open');
   const x = Math.min(e.clientX, window.innerWidth - 160);
   const y = Math.min(e.clientY, window.innerHeight - 120);
@@ -3106,6 +3127,19 @@ window.confirmRename = async () => {
     showToast(`標籤已重新命名為「${newName}」`);
   }
   closeRename();
+};
+
+window.toggleFolderDefaultVisibility = async () => {
+  closeCtxMenu();
+  if (!ctxTarget || ctxTarget.type !== 'folder') return;
+  const folder = folders.find(f => f.id === ctxTarget.id);
+  if (!folder) return;
+  const newVal = !folder.hiddenFromDefault;
+  await updateDoc(doc(db, 'folders', ctxTarget.id), { hiddenFromDefault: newVal });
+  folder.hiddenFromDefault = newVal; // optimistic local update
+  renderArticleList();
+  showToast(newVal ? `「${folder.name}」已從預設列表隱藏` : `「${folder.name}」已顯示於預設列表`);
+  ctxTarget = null;
 };
 
 window.deleteCtxTarget = async () => {
