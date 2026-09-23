@@ -578,6 +578,10 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   flex-shrink: 0; position: relative; z-index: 10; transition: transform 0.25s ease, opacity 0.25s ease;
 }
 .reading-toolbar.collapsed { transform: translateY(-44px); opacity: 0; pointer-events: none; }
+
+/* Mobile-only handle to fully collapse toolbar + title bar (content-only reading).
+   Hidden on desktop; shown and positioned inside the mobile media query below. */
+.reading-ui-toggle { display: none; }
 .tb-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; flex-shrink: 0; }
 .tb-spacer { flex: 1; }
 .tb-btn {
@@ -1039,6 +1043,27 @@ textarea.field-input { min-height: 180px; resize: vertical; line-height: 1.7; }
   #reading-modal .reading-title-bar { margin-top: 44px; }
   #new-modal .reading-title-bar { margin-top: 44px; }
   /* When toolbar is collapsed, no offset needed — but we keep it for layout consistency */
+
+  /* Manual toolbar/title collapse handle — a small tab hanging from the top edge */
+  .reading-ui-toggle {
+    display: flex; align-items: center; justify-content: center;
+    position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+    width: 48px; height: 17px; padding: 0;
+    background: var(--surface2); color: var(--text3);
+    border: 1px solid var(--border); border-top: none;
+    border-radius: 0 0 12px 12px;
+    font-size: 10px; line-height: 1; letter-spacing: 0;
+    z-index: 230; /* above .reading-toolbar-wrap (220) */
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  }
+  .reading-ui-toggle:active { background: var(--border2); }
+
+  /* Content-only mode: toolbar + title bar fully hidden, only reading body shows */
+  #reading-modal.ui-hidden .reading-toolbar-wrap,
+  #reading-modal.ui-hidden .reading-title-bar {
+    display: none !important;
+  }
+  #reading-modal.ui-hidden .reading-body-pane { padding-top: 28px; }
 
   /* Title bar */
   .reading-title-bar { padding: 12px 16px 10px; }

@@ -952,6 +952,9 @@ window.openReading = (id) => {
   }
   // mobile toolbar auto-hide
   setupMobileToolbar();
+  // Restore manual "content-only" reading preference (mobile toolbar+title collapse switch)
+  try { readingUIHidden = isMobile() && localStorage.getItem('reading_ui_hidden') === '1'; } catch (e) { readingUIHidden = false; }
+  applyReadingUIToggle();
 };
 
 window.closeReading = (fromPopstate) => {
@@ -1401,6 +1404,22 @@ window.toggleNewNotesPane = () => {
   if (bodyPane) bodyPane.classList.toggle('full', !newNotesVisible);
   const btn = document.getElementById('new-notes-btn');
   if (btn) btn.classList.toggle('active', newNotesVisible);
+};
+
+// ── Mobile: fully collapse toolbar + title bar (content-only reading) ──
+let readingUIHidden = false;
+function applyReadingUIToggle() {
+  document.getElementById('reading-modal').classList.toggle('ui-hidden', readingUIHidden);
+  const btn = document.getElementById('reading-ui-toggle');
+  if (btn) { btn.textContent = readingUIHidden ? '▼' : '▲'; btn.title = readingUIHidden ? '顯示工具列與標題' : '收合工具列與標題'; }
+}
+window.toggleReadingUI = () => {
+  readingUIHidden = !readingUIHidden;
+  applyReadingUIToggle();
+  clearTimeout(toolbarCollapseTimer);
+  const hint = document.getElementById('reading-tap-hint');
+  if (hint) hint.classList.remove('visible');
+  try { localStorage.setItem('reading_ui_hidden', readingUIHidden ? '1' : '0'); } catch (e) {}
 };
 
 window.toggleTitleBar = () => {
