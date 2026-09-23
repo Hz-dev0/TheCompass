@@ -234,6 +234,7 @@ function subscribeData() {
       folders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       renderFolderTree();
       renderFolderSelects();
+      renderArticleList(); // folder's hiddenFromDefault flag affects which articles show in the default list
     }, err => {
       console.error('[subscribeData] folders error:', err);
       showToast('讀取資料夾失敗：' + err.code);
@@ -296,7 +297,7 @@ function renderFolderTree() {
     ? articles.filter(a => !a.folderId || !hiddenFolderIdsForCount.has(a.folderId)).length
     : articles.length;
   allItem.className = 'folder-item' + (!currentFolderId ? ' active' : '');
-  allItem.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> 全部文章 <span class="count">${visibleArticleCount}</span>`;
+  allItem.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> 文章列表 <span class="count">${visibleArticleCount}</span>`;
   allItem.onclick = () => { currentFolderId = null; currentFolderPath = []; renderFolderTree(); renderArticleList(); };
   // drag over to remove folder assignment
   allItem.addEventListener('dragover', e => { e.preventDefault(); allItem.classList.add('drag-over'); });
@@ -414,7 +415,7 @@ function renderFolderTree() {
     item.draggable = true;
     item.dataset.folderId = folder.id;
     item.dataset.folderIdx = idx;
-    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(folder.name)}${folder.hiddenFromDefault ? ' <span class="folder-hidden-badge" title="未顯示於預設列表">🙈</span>' : ''}${isEmpty ? '' : ` <span class="count">${count}</span>`}`;
+    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(folder.name)}${folder.hiddenFromDefault ? ' <svg class="folder-hidden-badge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" title="未顯示於預設列表"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.8 21.8 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.8 21.8 0 0 1-2.34 3.5M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>' : ''}${isEmpty ? '' : ` <span class="count">${count}</span>`}`;
     item.onclick = (e) => {
       if (item.classList.contains('folder-dragging') || folderMoveMode) return;
       currentFolderId = folder.id;
