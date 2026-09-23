@@ -186,7 +186,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .folder-add svg { width: 14px; height: 14px; }
 #folder-move-toggle { font-size: 14px; line-height: 1; }
 #folder-move-toggle.active { background: var(--accent-light); color: var(--accent); }
-.folder-tree.move-mode .folder-item:not(.folder-back) { cursor: grab; }
+.folder-tree.move-mode .folder-item { cursor: grab; }
 .folder-tree.move-mode .folder-item.folder-move-target { background: var(--accent-light); outline: 1px dashed var(--accent); }
 
 .folder-tree { flex: 1; overflow-y: auto; padding: 0 8px 12px; display: flex; flex-direction: column; gap: 1px; }
@@ -209,9 +209,14 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--text);
 .folder-item.folder-empty { opacity: 0.6; }
 .folder-item.folder-hidden-default { opacity: 0.7; }
 .folder-hidden-badge { width: 11px; height: 11px; opacity: 0.6; margin-left: 2px; vertical-align: -1px; flex-shrink: 0; }
-.folder-indent { padding-left: 22px; }
-.folder-back { color: var(--accent); font-size: 12px; }
-.folder-back svg { color: var(--accent); }
+.folder-chevron {
+  width: 12px; height: 12px; flex-shrink: 0; color: var(--text3);
+  transition: transform 0.15s ease, color var(--transition);
+  cursor: pointer; padding: 4px; box-sizing: content-box; margin: -4px;
+}
+.folder-chevron:hover { color: var(--text); }
+.folder-chevron.expanded { transform: rotate(90deg); }
+.folder-chevron-spacer { width: 12px; flex-shrink: 0; }
 /* Folder drag-reorder */
 .folder-item.folder-dragging { opacity: 0.35; }
 .folder-item.folder-drop-above { border-top: 2px solid var(--accent) !important; }

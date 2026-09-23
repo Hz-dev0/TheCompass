@@ -30,7 +30,11 @@ let currentUser = null;
 let articles = [];
 let folders = [];
 let currentFolderId = null; // null = root view (all)
-let currentFolderPath = []; // breadcrumb [{id, name}]
+let expandedFolderIds = new Set(); // tree-view: which folders are expanded to show children
+try { expandedFolderIds = new Set(JSON.parse(localStorage.getItem('compass_expanded_folders') || '[]')); } catch (e) {}
+function saveExpandedFolders() {
+  try { localStorage.setItem('compass_expanded_folders', JSON.stringify([...expandedFolderIds])); } catch (e) {}
+}
 let activeTag = '__all__';
 let currentArticleId = null;
 let mdMode = false;
@@ -298,23 +302,36 @@ function renderFolderTree() {
     : articles.length;
   allItem.className = 'folder-item' + (!currentFolderId ? ' active' : '');
   allItem.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> 文章列表 <span class="count">${visibleArticleCount}</span>`;
-  allItem.onclick = () => { currentFolderId = null; currentFolderPath = []; renderFolderTree(); renderArticleList(); };
-  // drag over to remove folder assignment
-  allItem.addEventListener('dragover', e => { e.preventDefault(); allItem.classList.add('drag-over'); });
-  allItem.addEventListener('dragleave', () => allItem.classList.remove('drag-over'));
+  allItem.onclick = () => { currentFolderId = null; renderFolderTree(); renderArticleList(); };
+  // drag over to remove folder assignment (article) OR move a folder to the root level (move mode)
+  allItem.addEventListener('dragover', e => {
+    e.preventDefault();
+    if (folderMoveMode && e.dataTransfer.types.includes('folderid')) allItem.classList.add('folder-move-target');
+    else allItem.classList.add('drag-over');
+  });
+  allItem.addEventListener('dragleave', () => allItem.classList.remove('drag-over', 'folder-move-target'));
   allItem.addEventListener('drop', async e => {
-    e.preventDefault(); allItem.classList.remove('drag-over');
+    e.preventDefault(); allItem.classList.remove('drag-over', 'folder-move-target');
     const artId = e.dataTransfer.getData('articleId');
-    if (!artId) return;
-    const art = articles.find(a => a.id === artId);
-    const prevFolderId = art ? art.folderId : undefined;
-    if (art) { art.folderId = null; renderFolderTree(); renderArticleList(); }
-    showToast('已移出資料夾');
-    try {
-      await updateDoc(doc(db, 'articles', artId), { folderId: null });
-    } catch (err) {
-      if (art) { art.folderId = prevFolderId; renderFolderTree(); renderArticleList(); }
-      showToast('移動失敗：' + err.message);
+    const srcFolderId = e.dataTransfer.getData('folderId');
+    if (artId) {
+      const art = articles.find(a => a.id === artId);
+      const prevFolderId = art ? art.folderId : undefined;
+      if (art) { art.folderId = null; renderFolderTree(); renderArticleList(); }
+      showToast('已移出資料夾');
+      try {
+        await updateDoc(doc(db, 'articles', artId), { folderId: null });
+      } catch (err) {
+        if (art) { art.folderId = prevFolderId; renderFolderTree(); renderArticleList(); }
+        showToast('移動失敗：' + err.message);
+      }
+    } else if (folderMoveMode && srcFolderId) {
+      const srcFolder = folders.find(f => f.id === srcFolderId);
+      if (!srcFolder || !srcFolder.parentId) return; // already at root
+      await updateDoc(doc(db, 'folders', srcFolderId), { parentId: null });
+      srcFolder.parentId = null;
+      renderFolderTree();
+      showToast(`「${srcFolder.name}」已移至根目錄`);
     }
   });
   tree.appendChild(allItem);
@@ -326,11 +343,7 @@ function renderFolderTree() {
   uncatItem.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg> 未分類 <span class="count">${uncatCount}</span>`;
   uncatItem.onclick = () => {
     // Toggle: clicking again goes back to all
-    if (currentFolderId === '__uncat__') {
-      currentFolderId = null; currentFolderPath = [];
-    } else {
-      currentFolderId = '__uncat__'; currentFolderPath = [];
-    }
+    currentFolderId = (currentFolderId === '__uncat__') ? null : '__uncat__';
     renderFolderTree(); renderArticleList();
   };
   // Allow dragging articles here to remove folder assignment
@@ -353,73 +366,46 @@ function renderFolderTree() {
   });
   tree.appendChild(uncatItem);
 
-  // Back button if inside folder
-  if (currentFolderPath.length > 0) {
-    const backItem = document.createElement('div');
-    backItem.className = 'folder-item folder-back';
-    const parentId = currentFolderPath.length > 1 ? currentFolderPath[currentFolderPath.length-2].id : null;
-    backItem.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg> 上一層`;
-    backItem.onclick = () => {
-      if (folderMoveMode) return;
-      currentFolderPath.pop();
-      currentFolderId = parentId;
-      renderFolderTree();
-      renderArticleList();
-    };
-    // In move mode, dropping a folder here moves it up one level (out of current folder)
-    if (folderMoveMode) {
-      backItem.addEventListener('dragover', e => {
-        if (!e.dataTransfer.types.includes('folderid')) return;
-        e.preventDefault();
-        backItem.classList.add('folder-move-target');
-      });
-      backItem.addEventListener('dragleave', () => backItem.classList.remove('folder-move-target'));
-      backItem.addEventListener('drop', async e => {
-        e.preventDefault();
-        backItem.classList.remove('folder-move-target');
-        const srcFolderId = e.dataTransfer.getData('folderId');
-        if (!srcFolderId) return;
-        const srcFolder = folders.find(f => f.id === srcFolderId);
-        if (!srcFolder) return;
-        const newParentId = parentId; // grandparent of current folder
-        await updateDoc(doc(db, 'folders', srcFolderId), { parentId: newParentId || null });
-        srcFolder.parentId = newParentId || null;
-        renderFolderTree();
-        showToast(`「${srcFolder.name}」已移至上一層`);
-      });
-    }
-    tree.appendChild(backItem);
-  }
-
-  // Current path breadcrumb
-  if (currentFolderPath.length > 0) {
-    const crumb = document.createElement('div');
-    crumb.style.cssText = 'padding:4px 8px 2px;font-size:11px;color:var(--text3);';
-    crumb.textContent = currentFolderPath.map(p=>p.name).join(' › ');
-    tree.appendChild(crumb);
-  }
-
   tree.classList.toggle('move-mode', folderMoveMode);
 
-  // Show children of current folder
-  const parentId = (currentFolderId === '__uncat__' || currentFolderId === null) ? null : currentFolderId;
-  const children = folders
-    .filter(f => (f.parentId||null) === parentId)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-
-  children.forEach((folder, idx) => {
+  // ── Tree-expand rendering: recursively render every folder, indented by depth ──
+  function renderFolderRow(folder, depth) {
+    const siblings = folders
+      .filter(f => (f.parentId || null) === (folder.parentId || null))
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const kids = folders
+      .filter(f => (f.parentId || null) === folder.id)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const hasKids = kids.length > 0;
+    const isExpanded = expandedFolderIds.has(folder.id);
     const count = articles.filter(a => a.folderId === folder.id).length;
     const isEmpty = count === 0;
+
     const item = document.createElement('div');
     item.className = 'folder-item' + (currentFolderId===folder.id ? ' active':'') + (isEmpty ? ' folder-empty' : '') + (folder.hiddenFromDefault ? ' folder-hidden-default' : '');
     item.draggable = true;
     item.dataset.folderId = folder.id;
-    item.dataset.folderIdx = idx;
-    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(folder.name)}${folder.hiddenFromDefault ? ' <svg class="folder-hidden-badge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" title="未顯示於預設列表"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.8 21.8 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.8 21.8 0 0 1-2.34 3.5M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>' : ''}${isEmpty ? '' : ` <span class="count">${count}</span>`}`;
+    item.dataset.folderIdx = siblings.findIndex(f => f.id === folder.id);
+    item.style.paddingLeft = (8 + depth * 18) + 'px';
+    const chevronHtml = hasKids
+      ? `<svg class="folder-chevron${isExpanded ? ' expanded' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"/></svg>`
+      : `<span class="folder-chevron-spacer"></span>`;
+    item.innerHTML = `${chevronHtml}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7c0-1.1.9-2 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg> ${escHtml(folder.name)}${folder.hiddenFromDefault ? ' <svg class="folder-hidden-badge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" title="未顯示於預設列表"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.8 21.8 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.8 21.8 0 0 1-2.34 3.5M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>' : ''}${isEmpty ? '' : ` <span class="count">${count}</span>`}`;
+
+    const chevronEl = hasKids ? item.querySelector('.folder-chevron') : null;
+    if (chevronEl) {
+      chevronEl.addEventListener('click', e => {
+        e.stopPropagation();
+        if (expandedFolderIds.has(folder.id)) expandedFolderIds.delete(folder.id);
+        else expandedFolderIds.add(folder.id);
+        saveExpandedFolders();
+        renderFolderTree();
+      });
+    }
+
     item.onclick = (e) => {
-      if (item.classList.contains('folder-dragging') || folderMoveMode) return;
+      if (item.classList.contains('folder-dragging') || folderMoveMode || e.target.closest('.folder-chevron')) return;
       currentFolderId = folder.id;
-      currentFolderPath = [...currentFolderPath, {id: folder.id, name: folder.name}];
       renderFolderTree();
       renderArticleList();
     };
@@ -452,6 +438,8 @@ function renderFolderTree() {
         }
         await updateDoc(doc(db, 'folders', srcFolderId), { parentId: folder.id });
         srcFolder.parentId = folder.id;
+        expandedFolderIds.add(folder.id); // reveal the folder we just moved into
+        saveExpandedFolders();
         renderFolderTree();
         showToast(`已移入「${folder.name}」`);
       });
@@ -520,12 +508,13 @@ function renderFolderTree() {
           const targetFolder = folder;
           if (!srcFolder) return;
           // Only reorder if same parent (move mode handles cross-folder moves)
-          if ((srcFolder.parentId||null) !== parentId) {
+          const targetParentId = folder.parentId || null;
+          if ((srcFolder.parentId||null) !== targetParentId) {
             showToast('請使用移動模式跨資料夾移動');
             return;
           }
           const sibs = folders
-            .filter(f => (f.parentId||null) === parentId && f.id !== srcFolderId)
+            .filter(f => (f.parentId||null) === targetParentId && f.id !== srcFolderId)
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
           const targetIdx = sibs.findIndex(f => f.id === targetFolder.id);
           const insertIdx = insertAbove ? targetIdx : targetIdx + 1;
@@ -553,7 +542,16 @@ function renderFolderTree() {
       tree.querySelectorAll('.folder-item').forEach(el => el.classList.remove('folder-drop-above', 'folder-drop-below', 'folder-move-target', 'drag-over'));
     });
     tree.appendChild(item);
-  });
+
+    if (hasKids && isExpanded) {
+      kids.forEach(kid => renderFolderRow(kid, depth + 1));
+    }
+  }
+
+  const roots = folders
+    .filter(f => (f.parentId || null) === null)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  roots.forEach(folder => renderFolderRow(folder, 0));
 }
 
 window.toggleFolderMoveMode = () => {
@@ -2602,6 +2600,7 @@ window.saveFolderModal = async () => {
   const siblings = folders.filter(f => (f.parentId||null) === parentId);
   const maxOrder = siblings.reduce((m, f) => Math.max(m, f.order ?? 0), 0);
   await addDoc(collection(db, 'folders'), { uid: currentUser.uid, name, parentId, order: maxOrder + 1 });
+  if (parentId) { expandedFolderIds.add(parentId); saveExpandedFolders(); }
   closeFolderModal();
   showToast(`資料夾「${name}」已建立`);
   if (currentUser?.isAnonymous && window._fetchAnonData) window._fetchAnonData();
@@ -3158,7 +3157,9 @@ window.deleteCtxTarget = async () => {
   await Promise.all(moveUpdates);
   await deleteDoc(doc(db, 'folders', ctxTarget.id));
   if (currentUser?.isAnonymous && window._fetchAnonData) window._fetchAnonData();
-  if (currentFolderId === ctxTarget.id) { currentFolderId = null; currentFolderPath = []; }
+  if (currentFolderId === ctxTarget.id) { currentFolderId = null; }
+  expandedFolderIds.delete(ctxTarget.id);
+  saveExpandedFolders();
   ctxTarget = null;
   showToast('資料夾已刪除');
 };
