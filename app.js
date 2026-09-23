@@ -45,7 +45,6 @@ let pendingHighlightText = '';
 let pendingHighlightOccurrence = 0; // which instance of the text was selected (0 = 1st)
 let searchOpen = false;
 let saveTimeout = null;
-let selectionRange = null;
 let passcodeTargetUid = null; // uid to load data for when using passcode login
 let batchMode = false;
 let folderMoveMode = false;
@@ -1575,8 +1574,6 @@ window.toggleReadStatus = async () => {
   await updateDoc(doc(db, 'articles', currentArticleId), { readStatus: next });
   showToast(next === 'done' ? '已標記為已閱 ☑️' : '已標記為待閱 🔲');
 };
-// keep backward compat
-window.cycleReadStatus = window.toggleReadStatus;
 
 // ── Favorite ──
 window.toggleFavorite = async () => {
@@ -2985,16 +2982,6 @@ window.loginWithPasscode = async () => {
     window._passcodeLoginInProgress = false;
   }
 };
-
-
-function loadAnonymousData(uid, anonUid) {
-  // anonUid = Firebase Auth uid of the anonymous session (may differ from ownerUid)
-  currentUser = { uid, _anonUid: anonUid || null, displayName: '匿名', photoURL: null, isAnonymous: true };
-  document.getElementById('auth-screen').style.display = 'none';
-  document.getElementById('app').classList.add('visible');
-  document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式">匿</div>';
-  subscribeData();
-}
 
 // Check saved passcode on load
 (async function checkPasscode() {
