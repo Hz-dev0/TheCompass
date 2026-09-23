@@ -661,8 +661,10 @@ function buildArticleRow(art) {
   });
   row.addEventListener('dragend', () => row.classList.remove('drag-dragging'));
   // Hover highlight tooltip (desktop only)
-  if (art.highlight && !isMobile()) {
-    row.addEventListener('mouseenter', e => showHighlightTooltip(e, art.highlight));
+  const rowHls = getHighlights(art);
+  if (rowHls.length && !isMobile()) {
+    const tipText = rowHls.map(h => h.text).join('\n');
+    row.addEventListener('mouseenter', e => showHighlightTooltip(e, tipText));
     row.addEventListener('mousemove', e => moveHighlightTooltip(e));
     row.addEventListener('mouseleave', hideHighlightTooltip);
   }
@@ -853,6 +855,7 @@ let titleBarVisible = true;
 let ttsUtterance = null;
 let ttsPlaying = false;
 let _ttsKeepAliveTimer = null;
+let _ttsLoop = false; // true while repeat-selection playback is looping
 let _lastBodySelection = '';
 document.addEventListener('selectionchange', () => {
   const bodyEl = document.getElementById('reading-body-content');
@@ -869,6 +872,38 @@ document.addEventListener('selectionchange', () => {
 });
 let toolbarCollapseTimer = null;
 let isMobile = () => window.innerWidth <= 768;
+
+// ── Screen wake lock (Settings > 外觀 > 螢幕保持開啟) ──
+// Keeps the screen from timing out on mobile while the app is open. Uses the
+// standard Wake Lock API; unsupported browsers (e.g. older iOS Safari) just
+// silently fall back to the OS's normal screen-timeout behavior.
+let _wakeLockObj = null;
+async function applyWakeLockSetting() {
+  if (!('wakeLock' in navigator)) return;
+  const want = localStorage.getItem('keep_screen_on') === '1';
+  try {
+    if (want && !_wakeLockObj && document.visibilityState === 'visible') {
+      _wakeLockObj = await navigator.wakeLock.request('screen');
+      _wakeLockObj.addEventListener('release', () => { _wakeLockObj = null; });
+    } else if (!want && _wakeLockObj) {
+      const wl = _wakeLockObj;
+      _wakeLockObj = null;
+      await wl.release();
+    }
+  } catch (e) {
+    console.warn('[wakeLock]', e);
+  }
+}
+window.toggleKeepScreenOn = (checked) => {
+  localStorage.setItem('keep_screen_on', checked ? '1' : '0');
+  applyWakeLockSetting();
+};
+// A wake lock is automatically released when the tab is hidden — re-acquire
+// it when the user comes back if the setting is still on.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') applyWakeLockSetting();
+});
+window.addEventListener('load', () => applyWakeLockSetting());
 
 window.openReading = (id) => {
   const art = articles.find(a => a.id === id);
@@ -1088,14 +1123,30 @@ function renderBodyPane(art) {
     pane.innerHTML = `<textarea class="art-body-editor" id="body-editor" oninput="scheduleFieldSave('body', this.value)">${escHtml(art.body||'')}</textarea>`;
   } else {
     let html = renderMarkdown(art.body||'');
-    if (art.highlight) {
-      // Escape highlight text for safe regex, then find it in the rendered HTML (which has escaped entities)
-      const hEsc = escHtml(art.highlight);
-      const safeRe = hEsc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      html = html.replace(new RegExp(safeRe, 'g'), `<mark>${hEsc}</mark>`);
+    const hls = getHighlights(art);
+    if (hls.length) {
+      // Wrap longer highlights first (reduces broken nesting when one
+      // highlight's text happens to contain another's). Each occurrence is
+      // first swapped for a unique \x00-delimited placeholder (so a later,
+      // shorter highlight's regex can't re-match text already wrapped by an
+      // earlier one), then all placeholders are swapped for real <mark> tags.
+      const ordered = hls.map((h, i) => ({ text: h.text, color: h.color, i }))
+        .filter(h => h.text)
+        .sort((a, b) => b.text.length - a.text.length);
+      ordered.forEach(h => {
+        const hEsc = escHtml(h.text);
+        const safeRe = hEsc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        html = html.replace(new RegExp(safeRe, 'g'), m => `\x00HLS${h.i}\x00${m}\x00HLE\x00`);
+      });
+      ordered.forEach(h => {
+        const color = HIGHLIGHT_COLORS[h.color] ? h.color : DEFAULT_HIGHLIGHT_COLOR;
+        html = html.split(`\x00HLS${h.i}\x00`).join(
+          `<mark class="hl-${color}" onclick="window.onHighlightMarkClick(event, ${h.i})">`);
+      });
+      html = html.split('\x00HLE\x00').join('</mark>');
     }
     const cls = 'art-body-rendered' + (highlightState !== 'off' ? ' highlight-mode' : '');
-    pane.innerHTML = `<div class="${cls}" id="body-rendered" ondblclick="toggleReadingMd()" title="雙擊進入編輯模式">${html}</div>`;
+    pane.innerHTML = `<div class="${cls}" id="body-rendered">${html}</div>`;
   }
 }
 
@@ -1767,7 +1818,27 @@ window.toggleTTS = () => {
   // and the strip patterns need to see the full markers to match correctly.
   const remainingText = _stripMarkdownForSpeech(remainingTextRaw);
   if (!remainingText) { showToast('這段內容沒有可朗讀的文字'); return; }
+  // Progress is tracked against the stripped (spoken) text length, since
+  // markdown stripping changes the character count and we no longer have a
+  // clean way to map each spoken chunk back to a raw-text span.
+  const strippedPrefixLen = startOffset > 0 ? _stripMarkdownForSpeech(text.slice(0, startOffset)).length : 0;
+  _speak(remainingText, { loop: false, prefixLen: strippedPrefixLen });
+};
 
+// Reads `rawText` on a loop until stopped — used by the "重複朗讀選取句子"
+// selection popup so the user can hear one sentence over and over (useful
+// for practicing pronunciation) instead of it reading on to the end.
+window.startTTSLoop = (rawText) => {
+  if (ttsPlaying) stopTTS();
+  const stripped = _stripMarkdownForSpeech((rawText || '').trim());
+  if (!stripped) { showToast('這段文字沒有可朗讀的內容'); return; }
+  _speak(stripped, { loop: true, prefixLen: 0 });
+  showToast('🔁 重複朗讀中，再次點擊 🔊 可停止');
+};
+
+// Shared queue-building + playback engine used by both toggleTTS (normal,
+// play-to-end) and startTTSLoop (repeat one selection indefinitely).
+function _speak(remainingText, { loop = false, prefixLen = 0 } = {}) {
   const savedLang = localStorage.getItem('tts_lang') || 'zh-TW';
   const savedVoiceName = localStorage.getItem('tts_voice') || '';
   const voices = _getVoices();
@@ -1822,12 +1893,9 @@ window.toggleTTS = () => {
   }
 
   _ttsQueueIdx = 0;
-  // Progress is now tracked against the stripped (spoken) text length, since
-  // markdown stripping changes the character count and we no longer have a
-  // clean way to map each spoken chunk back to a raw-text span.
-  const strippedPrefixLen = startOffset > 0 ? _stripMarkdownForSpeech(text.slice(0, startOffset)).length : 0;
-  _ttsTotalLen = remainingText.length + strippedPrefixLen;
-  _ttsCharsBefore = strippedPrefixLen;
+  _ttsTotalLen = remainingText.length + prefixLen;
+  _ttsCharsBefore = prefixLen;
+  _ttsLoop = loop;
   const rate = parseFloat(localStorage.getItem('tts_rate') || '1');
   const myGen = ++_ttsGen; // this run's identity
 
@@ -1835,7 +1903,18 @@ window.toggleTTS = () => {
 
   const speakNext = () => {
     if (myGen !== _ttsGen) return; // a newer run (or a stop) has superseded this one
-    if (_ttsQueueIdx >= _ttsQueue.length) { stopTTS(); return; }
+    if (_ttsQueueIdx >= _ttsQueue.length) {
+      if (_ttsLoop && _ttsQueue.length) {
+        // Reached the end of a loop-mode selection — start over from the top.
+        _ttsQueueIdx = 0;
+        _ttsCharsBefore = prefixLen;
+        const bar0 = document.getElementById('tts-progress-bar');
+        if (bar0) bar0.style.width = '0%';
+      } else {
+        stopTTS();
+        return;
+      }
+    }
     const seg = _ttsQueue[_ttsQueueIdx];
     const utter = new SpeechSynthesisUtterance(seg.text);
     utter.lang = seg.lang;
@@ -1845,7 +1924,7 @@ window.toggleTTS = () => {
       if (myGen !== _ttsGen) return;
       ttsPlaying = true;
       const btn = document.getElementById('tb-tts-btn');
-      if (btn) { btn.classList.add('active'); btn.textContent = '⏹'; }
+      if (btn) { btn.classList.add('active'); btn.textContent = _ttsLoop ? '🔁' : '⏹'; }
       document.getElementById('tts-progress').classList.add('active');
     };
     utter.onerror = (e) => {
@@ -1878,11 +1957,12 @@ window.toggleTTS = () => {
   };
 
   speakNext();
-};
+}
 
 function stopTTS() {
   speechSynthesis.cancel();
   ttsPlaying = false;
+  _ttsLoop = false;
   _ttsGen++; // invalidate any in-flight callbacks from the run being stopped
   clearInterval(_ttsKeepAliveTimer);
   // Drop the queue so an in-flight onend from the previous utterance
@@ -1967,6 +2047,55 @@ function setupMobileToolbar() {
 // ── Highlight mode ──
 // State: 'off' | 'selecting' | 'confirming'
 
+// Pastel highlighter colors the user can pick from when confirming a highlight.
+const HIGHLIGHT_COLORS = {
+  yellow: { label: '黃', bg: '#fff8c4', border: '#e8d34a' },
+  pink:   { label: '粉紅', bg: '#fff0f5', border: '#f0b0c8' },
+  green:  { label: '綠', bg: '#e2f6e6', border: '#9fd8ae' },
+  blue:   { label: '藍', bg: '#e5f0fc', border: '#a8c8f0' },
+  purple: { label: '紫', bg: '#f1e7fb', border: '#c8a8e8' },
+  orange: { label: '橘', bg: '#fdeadb', border: '#f0b878' },
+};
+const DEFAULT_HIGHLIGHT_COLOR = 'pink';
+
+// Reads an article's highlights as an array of {text, color}, transparently
+// upgrading the old single-string `art.highlight` field so existing data
+// keeps rendering (as a pink highlight) without needing a migration script.
+function getHighlights(art) {
+  if (Array.isArray(art.highlights)) return art.highlights;
+  if (art.highlight) return [{ text: art.highlight, color: DEFAULT_HIGHLIGHT_COLOR }];
+  return [];
+}
+
+// Clicking an existing <mark> in the rendered body (outside highlight-selection
+// mode) offers to remove just that highlight.
+window.onHighlightMarkClick = (e, idx) => {
+  if (highlightState !== 'off') return;
+  e.stopPropagation();
+  const art = articles.find(a => a.id === currentArticleId);
+  if (!art) return;
+  if (!confirm('移除這個 Highlight？')) return;
+  removeHighlightByIndex(art, idx);
+};
+
+async function removeHighlightByIndex(art, idx) {
+  const hls = getHighlights(art).slice();
+  if (idx < 0 || idx >= hls.length) return;
+  hls.splice(idx, 1);
+  const prevHighlights = art.highlights;
+  const prevLegacy = art.highlight;
+  art.highlights = hls;
+  art.highlight = '';
+  renderBodyPane(art);
+  try {
+    await updateDoc(doc(db, 'articles', currentArticleId), { highlights: hls, highlight: '' });
+    showToast('已移除 Highlight');
+  } catch (e) {
+    art.highlights = prevHighlights; art.highlight = prevLegacy; renderBodyPane(art);
+    showToast('移除失敗：' + e.message);
+  }
+}
+
 window.toggleHighlightMode = () => {
   if (highlightState !== 'off') {
     // Already active — cancel
@@ -2011,11 +2140,13 @@ function showHighlightConfirmBar(text) {
     `;
     document.body.appendChild(bar);
   }
-  const snippet = text.length > 28 ? text.slice(0,28) + '…' : text;
+  const snippet = text.length > 20 ? text.slice(0,20) + '…' : text;
+  const swatches = Object.entries(HIGHLIGHT_COLORS).map(([key, c]) =>
+    `<button onclick="confirmHighlight('${key}')" title="${c.label}" style="width:20px;height:20px;border-radius:50%;background:${c.bg};border:2px solid ${c.border};cursor:pointer;padding:0;flex-shrink:0"></button>`
+  ).join('');
   bar.innerHTML = `
-    <span style="color:var(--highlight-border);font-size:14px">🪄</span>
-    <span style="opacity:.75;font-size:12px;overflow:hidden;text-overflow:ellipsis;max-width:180px">"${escHtml(snippet)}"</span>
-    <button onclick="confirmHighlight()" style="background:var(--accent);color:#fff;border:none;border-radius:12px;padding:4px 12px;font-size:12px;cursor:pointer;font-family:var(--font-sans)">✓ 確認</button>
+    <span style="opacity:.75;font-size:12px;overflow:hidden;text-overflow:ellipsis;max-width:110px;white-space:nowrap">"${escHtml(snippet)}"</span>
+    <div style="display:flex;gap:6px">${swatches}</div>
     <button onclick="exitHighlightMode()" style="background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:12px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:var(--font-sans)">✕</button>
   `;
   bar.style.display = 'flex';
@@ -2026,18 +2157,25 @@ function hideHighlightConfirmBar() {
   if (bar) bar.style.display = 'none';
 }
 
-window.confirmHighlight = async () => {
+window.confirmHighlight = async (colorKey) => {
   if (!pendingHighlightText || !currentArticleId) return;
   const text = pendingHighlightText;
+  const color = HIGHLIGHT_COLORS[colorKey] ? colorKey : DEFAULT_HIGHLIGHT_COLOR;
   exitHighlightMode();
   const art = articles.find(a => a.id === currentArticleId);
-  const prevHighlight = art ? art.highlight : undefined;
-  if (art) { art.highlight = text; renderBodyPane(art); }
+  if (!art) return;
+  const prevHighlights = art.highlights;
+  const prevLegacy = art.highlight;
+  const newHls = getHighlights(art).slice();
+  newHls.push({ text, color });
+  art.highlights = newHls;
+  art.highlight = '';
+  renderBodyPane(art);
   showToast('Highlight 已儲存 🪄');
   try {
-    await updateDoc(doc(db, 'articles', currentArticleId), { highlight: text });
+    await updateDoc(doc(db, 'articles', currentArticleId), { highlights: newHls, highlight: '' });
   } catch (e) {
-    if (art) { art.highlight = prevHighlight; renderBodyPane(art); }
+    art.highlights = prevHighlights; art.highlight = prevLegacy; renderBodyPane(art);
     showToast('Highlight 儲存失敗：' + e.message);
   }
 };
@@ -2058,6 +2196,50 @@ document.addEventListener('mouseup', (e) => {
   pendingHighlightText = text;
   highlightState = 'confirming';
   showHighlightConfirmBar(text);
+});
+
+// ── TTS repeat-selection popup ──
+// Selecting text in the (non-editing, non-highlighting) reading body shows a
+// small floating "🔁 重複朗讀" button so the user can loop just that sentence
+// — handy for re-listening to a phrase without replaying the whole article.
+function showTTSRepeatPopup(x, y, text) {
+  let pop = document.getElementById('tts-repeat-popup');
+  if (!pop) {
+    pop = document.createElement('div');
+    pop.id = 'tts-repeat-popup';
+    pop.style.cssText = `
+      position:fixed; z-index:850; background:var(--text); color:#fff;
+      border-radius:18px; padding:6px 12px; font-size:12px;
+      align-items:center; gap:6px; cursor:pointer;
+      box-shadow:var(--shadow-lg); font-family:var(--font-sans);
+      white-space:nowrap;
+    `;
+    document.body.appendChild(pop);
+  }
+  pop.innerHTML = `🔁 重複朗讀此句`;
+  pop.onclick = (ev) => { ev.stopPropagation(); hideTTSRepeatPopup(); startTTSLoop(text); };
+  const popW = 110;
+  const left = Math.max(8, Math.min(x - popW / 2, window.innerWidth - popW - 8));
+  const top = Math.max(8, y - 44);
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+  pop.style.display = 'flex';
+}
+function hideTTSRepeatPopup() {
+  const pop = document.getElementById('tts-repeat-popup');
+  if (pop) pop.style.display = 'none';
+}
+document.addEventListener('mouseup', (e) => {
+  const modal = document.getElementById('reading-modal');
+  if (!modal.classList.contains('open') || mdMode || highlightState !== 'off') { hideTTSRepeatPopup(); return; }
+  if (!e.target.closest('#body-rendered')) { hideTTSRepeatPopup(); return; }
+  const sel = window.getSelection();
+  const text = sel?.toString().trim();
+  if (!text || text.length < 2) { hideTTSRepeatPopup(); return; }
+  showTTSRepeatPopup(e.clientX, e.clientY, text);
+});
+document.addEventListener('mousedown', (e) => {
+  if (!e.target.closest('#tts-repeat-popup')) hideTTSRepeatPopup();
 });
 
 // ── Delete ──
@@ -2230,7 +2412,7 @@ window.saveNewArticle = async () => {
     const docRef = await addDoc(collection(db, 'articles'), {
       uid: currentUser.uid,
       title, body, author, url, tags: [...newTags], folderId: newFolderId,
-      notes, highlight: '',
+      notes, highlight: '', highlights: [],
       readStatus: '', favorite: false,
       createdAt: serverTimestamp()
     });
@@ -2472,7 +2654,7 @@ function renderSettingsBody() {
       </div>
       <div class="settings-row">
         <label>語速</label>
-        <input type="range" min="0.5" max="2" step="0.1" value="${savedRate}" style="flex:1"
+        <input type="range" min="0.2" max="2" step="0.1" value="${savedRate}" style="flex:1"
           oninput="localStorage.setItem('tts_rate',this.value);document.getElementById('speed-val').textContent=parseFloat(this.value).toFixed(1)+'x'" />
         <span class="speed-val" id="speed-val">${parseFloat(savedRate).toFixed(1)}x</span>
       </div>
@@ -2483,12 +2665,22 @@ function renderSettingsBody() {
     `;
   } else if (currentSettingsTab === 'appearance') {
     const savedSize = parseInt(localStorage.getItem('reading_font_size_default') || '16');
+    const keepScreenOn = localStorage.getItem('keep_screen_on') === '1';
+    const wakeLockSupported = typeof navigator !== 'undefined' && 'wakeLock' in navigator;
     body.innerHTML = `
       <div class="settings-row">
         <label>閱讀字體</label>
         <select onchange="applyDefaultFontSize(parseInt(this.value))">
           ${[12,14,16,18,20,22,24,26,28,30,32].map(s=>`<option value="${s}" ${s===savedSize?'selected':''}>${s}px</option>`).join('')}
         </select>
+      </div>
+      <div class="settings-row">
+        <label>手機螢幕保持開啟${wakeLockSupported ? '' : '（此瀏覽器不支援）'}</label>
+        <label class="switch-toggle">
+          <input type="checkbox" ${keepScreenOn ? 'checked' : ''} ${wakeLockSupported ? '' : 'disabled'}
+            onchange="toggleKeepScreenOn(this.checked)">
+          <span class="switch-slider"></span>
+        </label>
       </div>
     `;
   } else if (currentSettingsTab === 'account') {
