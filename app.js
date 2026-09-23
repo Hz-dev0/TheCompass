@@ -38,6 +38,7 @@ let newMdMode = false;
 let highlightMode = false;
 let highlightState = 'off'; // 'off' | 'selecting' | 'confirming'
 let pendingHighlightText = '';
+let pendingHighlightOccurrence = 0; // which instance of the text was selected (0 = 1st)
 let searchOpen = false;
 let saveTimeout = null;
 let selectionRange = null;
@@ -660,8 +661,9 @@ function buildArticleRow(art) {
     row.classList.add('drag-dragging');
   });
   row.addEventListener('dragend', () => row.classList.remove('drag-dragging'));
-  // Hover highlight tooltip (desktop only)
-  const rowHls = getHighlights(art);
+  // Hover highlight tooltip (desktop only) — only highlights the user has
+  // explicitly opted into showing in the list.
+  const rowHls = getHighlights(art).filter(h => h.showInList);
   if (rowHls.length && !isMobile()) {
     const tipText = rowHls.map(h => h.text).join('\n');
     row.addEventListener('mouseenter', e => showHighlightTooltip(e, tipText));
@@ -1117,6 +1119,22 @@ function inlineMarkdown(text) {
     });
 }
 
+// Wraps only the Nth (0-based) occurrence of `needleEsc` inside `html` —
+// used so highlighting one instance of a word doesn't mark every instance.
+function _wrapNthOccurrence(html, needleEsc, occurrence, wrapStart, wrapEnd) {
+  const safeRe = needleEsc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(safeRe, 'g');
+  let m, count = 0;
+  while ((m = re.exec(html)) !== null) {
+    if (count === occurrence) {
+      return html.slice(0, m.index) + wrapStart + m[0] + wrapEnd + html.slice(m.index + m[0].length);
+    }
+    count++;
+    if (re.lastIndex === m.index) re.lastIndex++; // guard against empty-match infinite loop
+  }
+  return html; // that occurrence no longer exists (e.g. body text changed) — skip silently
+}
+
 function renderBodyPane(art) {
   const pane = document.getElementById('reading-body-content');
   if (mdMode) {
@@ -1125,18 +1143,20 @@ function renderBodyPane(art) {
     let html = renderMarkdown(art.body||'');
     const hls = getHighlights(art);
     if (hls.length) {
+      // Each highlight remembers which *occurrence* of its text the user
+      // selected (0 = first match, 1 = second, ...), so only that specific
+      // instance gets wrapped — not every place the same word/phrase appears.
       // Wrap longer highlights first (reduces broken nesting when one
-      // highlight's text happens to contain another's). Each occurrence is
-      // first swapped for a unique \x00-delimited placeholder (so a later,
-      // shorter highlight's regex can't re-match text already wrapped by an
-      // earlier one), then all placeholders are swapped for real <mark> tags.
-      const ordered = hls.map((h, i) => ({ text: h.text, color: h.color, i }))
+      // highlight's text happens to contain another's). Each match is first
+      // swapped for a unique \x00-delimited placeholder (so a later, shorter
+      // highlight's search can't re-match text already wrapped by an earlier
+      // one), then all placeholders are swapped for real <mark> tags.
+      const ordered = hls.map((h, i) => ({ text: h.text, color: h.color, occurrence: h.occurrence || 0, i }))
         .filter(h => h.text)
         .sort((a, b) => b.text.length - a.text.length);
       ordered.forEach(h => {
         const hEsc = escHtml(h.text);
-        const safeRe = hEsc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        html = html.replace(new RegExp(safeRe, 'g'), m => `\x00HLS${h.i}\x00${m}\x00HLE\x00`);
+        html = _wrapNthOccurrence(html, hEsc, h.occurrence, `\x00HLS${h.i}\x00`, `\x00HLE\x00`);
       });
       ordered.forEach(h => {
         const color = HIGHLIGHT_COLORS[h.color] ? h.color : DEFAULT_HIGHLIGHT_COLOR;
@@ -2058,20 +2078,93 @@ const HIGHLIGHT_COLORS = {
 };
 const DEFAULT_HIGHLIGHT_COLOR = 'pink';
 
-// Reads an article's highlights as an array of {text, color}, transparently
-// upgrading the old single-string `art.highlight` field so existing data
-// keeps rendering (as a pink highlight) without needing a migration script.
+// Reads an article's highlights as an array of {text, color, occurrence,
+// showInList}, transparently upgrading the old single-string `art.highlight`
+// field so existing data keeps rendering (as a pink highlight, shown in the
+// list — matching its old always-shown behavior) without a migration script.
 function getHighlights(art) {
   if (Array.isArray(art.highlights)) return art.highlights;
-  if (art.highlight) return [{ text: art.highlight, color: DEFAULT_HIGHLIGHT_COLOR }];
+  if (art.highlight) return [{ text: art.highlight, color: DEFAULT_HIGHLIGHT_COLOR, occurrence: 0, showInList: true }];
   return [];
 }
 
 // Clicking an existing <mark> in the rendered body (outside highlight-selection
-// mode) offers to remove just that highlight.
+// mode) opens a small menu: toggle whether this highlight shows up in the
+// article list, or remove it.
 window.onHighlightMarkClick = (e, idx) => {
   if (highlightState !== 'off') return;
   e.stopPropagation();
+  const art = articles.find(a => a.id === currentArticleId);
+  if (!art) return;
+  showHighlightMarkMenu(e.clientX, e.clientY, idx);
+};
+
+function showHighlightMarkMenu(x, y, idx) {
+  let menu = document.getElementById('hl-mark-menu');
+  if (!menu) {
+    menu = document.createElement('div');
+    menu.id = 'hl-mark-menu';
+    menu.style.cssText = `
+      position:fixed; z-index:900; background:var(--surface); border:1px solid var(--border2);
+      border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); padding:6px;
+      display:none; min-width:190px; font-family:var(--font-sans); font-size:13px;
+    `;
+    document.body.appendChild(menu);
+  }
+  const art = articles.find(a => a.id === currentArticleId);
+  const h = art ? getHighlights(art)[idx] : null;
+  if (!h) return;
+  const shown = !!h.showInList;
+  menu.innerHTML = `
+    <div onclick="window.toggleHighlightShowInList(${idx})"
+      style="padding:8px 10px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px"
+      onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+      <span>${shown ? '✅' : '☐'}</span><span>在文章列表顯示這段</span>
+    </div>
+    <div onclick="window.removeHighlightConfirm(${idx})"
+      style="padding:8px 10px;border-radius:8px;cursor:pointer;color:var(--danger)"
+      onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">
+      🗑 移除這個 Highlight
+    </div>
+  `;
+  const menuW = 190;
+  menu.style.left = Math.max(8, Math.min(x, window.innerWidth - menuW - 8)) + 'px';
+  menu.style.top = Math.max(8, y) + 'px';
+  menu.style.display = 'block';
+}
+function hideHighlightMarkMenu() {
+  const menu = document.getElementById('hl-mark-menu');
+  if (menu) menu.style.display = 'none';
+}
+document.addEventListener('mousedown', (e) => {
+  if (!e.target.closest('#hl-mark-menu')) hideHighlightMarkMenu();
+});
+
+// Toggles whether one highlight's text is shown in the article-list hover
+// tooltip — kept separate from marking the text, so the user picks which
+// highlighted passage (if any) surfaces in the list.
+window.toggleHighlightShowInList = async (idx) => {
+  hideHighlightMarkMenu();
+  const art = articles.find(a => a.id === currentArticleId);
+  if (!art) return;
+  const hls = getHighlights(art).map(h => ({ ...h }));
+  if (idx < 0 || idx >= hls.length) return;
+  hls[idx].showInList = !hls[idx].showInList;
+  const prevHighlights = art.highlights;
+  const prevLegacy = art.highlight;
+  art.highlights = hls;
+  art.highlight = '';
+  showToast(hls[idx].showInList ? '已設為在列表顯示' : '已取消在列表顯示');
+  try {
+    await updateDoc(doc(db, 'articles', currentArticleId), { highlights: hls, highlight: '' });
+  } catch (e) {
+    art.highlights = prevHighlights; art.highlight = prevLegacy;
+    showToast('更新失敗：' + e.message);
+  }
+};
+
+window.removeHighlightConfirm = (idx) => {
+  hideHighlightMarkMenu();
   const art = articles.find(a => a.id === currentArticleId);
   if (!art) return;
   if (!confirm('移除這個 Highlight？')) return;
@@ -2160,6 +2253,7 @@ function hideHighlightConfirmBar() {
 window.confirmHighlight = async (colorKey) => {
   if (!pendingHighlightText || !currentArticleId) return;
   const text = pendingHighlightText;
+  const occurrence = pendingHighlightOccurrence;
   const color = HIGHLIGHT_COLORS[colorKey] ? colorKey : DEFAULT_HIGHLIGHT_COLOR;
   exitHighlightMode();
   const art = articles.find(a => a.id === currentArticleId);
@@ -2167,7 +2261,9 @@ window.confirmHighlight = async (colorKey) => {
   const prevHighlights = art.highlights;
   const prevLegacy = art.highlight;
   const newHls = getHighlights(art).slice();
-  newHls.push({ text, color });
+  // showInList defaults to false — marking and list-display are separate;
+  // the user opts a highlight into the list by clicking it afterward.
+  newHls.push({ text, color, occurrence, showInList: false });
   art.highlights = newHls;
   art.highlight = '';
   renderBodyPane(art);
@@ -2179,6 +2275,27 @@ window.confirmHighlight = async (colorKey) => {
     showToast('Highlight 儲存失敗：' + e.message);
   }
 };
+
+// Returns how far into `container`'s plain text (ignoring tags) a given
+// (node, offset) point falls — used to work out which occurrence of the
+// selected text the user actually picked.
+function _textOffsetInContainer(container, node, offset) {
+  const preRange = document.createRange();
+  preRange.selectNodeContents(container);
+  preRange.setEnd(node, offset);
+  return preRange.toString().length;
+}
+function _countOccurrencesBefore(haystack, needle, beforeIndex) {
+  if (!needle) return 0;
+  let count = 0, idx = 0;
+  while (true) {
+    const found = haystack.indexOf(needle, idx);
+    if (found === -1 || found >= beforeIndex) break;
+    count++;
+    idx = found + needle.length;
+  }
+  return count;
+}
 
 document.addEventListener('mouseup', (e) => {
   const modal = document.getElementById('reading-modal');
@@ -2193,7 +2310,17 @@ document.addEventListener('mouseup', (e) => {
   }
   // Only accept selections inside the body rendered area
   if (!e.target.closest('#body-rendered')) return;
+  let occurrence = 0;
+  const bodyEl = document.getElementById('body-rendered');
+  try {
+    if (bodyEl && sel.rangeCount) {
+      const range = sel.getRangeAt(0);
+      const offset = _textOffsetInContainer(bodyEl, range.startContainer, range.startOffset);
+      occurrence = _countOccurrencesBefore(bodyEl.textContent, text, offset);
+    }
+  } catch (err) { occurrence = 0; }
   pendingHighlightText = text;
+  pendingHighlightOccurrence = occurrence;
   highlightState = 'confirming';
   showHighlightConfirmBar(text);
 });
