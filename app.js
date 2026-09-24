@@ -1689,25 +1689,65 @@ document.addEventListener('click', e => {
 // worse when the text switches between scripts (e.g. Chinese mixed with
 // English), since the synthesis request has to language-switch mid-chunk.
 // Keeping each utterance short avoids both problems.
+// Word-boundary-safe fallback for the (rare) case where a single sentence has
+// no punctuation for 180+ characters. Splitting on raw character count would
+// cut mid-word — e.g. "internationalization" -> "internationaliz" + "ation" —
+// and feeding half a word to the speech engine produces genuinely garbled,
+// wrong pronunciation (not an accent issue, an actually-broken-word issue).
+// This matters far more for English than Chinese: 180 Latin characters is
+// only ~25-35 words (a normal sentence can easily run past that), whereas 180
+// CJK characters is already a very long sentence, and CJK has no word-internal
+// syllable to break since every character is already a complete syllable.
+function _wordWrapSplit(text, maxLen) {
+  const parts = text.split(/(\s+)/); // keep the whitespace so words don't fuse back together
+  const out = [];
+  let buf = '';
+  for (const part of parts) {
+    if ((buf + part).length <= maxLen) {
+      buf += part;
+      continue;
+    }
+    if (buf.trim()) out.push(buf);
+    if (part.length > maxLen) {
+      // A single "word" itself is longer than maxLen (long URL, no-space CJK run, etc.) — hard-cut it.
+      for (let i = 0; i < part.length; i += maxLen) out.push(part.slice(i, i + maxLen));
+      buf = '';
+    } else {
+      buf = part;
+    }
+  }
+  if (buf.trim()) out.push(buf);
+  return out;
+}
+
 function _splitForTTS(text) {
   const MAX_LEN = 180;
   // First split on sentence-ish boundaries (CJK and Latin punctuation),
   // then re-merge/re-split so each chunk stays under MAX_LEN.
+  // Note: the split regex consumes the whitespace after each sentence, so when
+  // re-joining pieces below we must re-insert a space ourselves — otherwise
+  // "First sentence. Second sentence." becomes "First sentence.Second sentence."
+  // A period glued straight onto the next capital letter with no space breaks
+  // the TTS engine's sentence-boundary detection: it stops applying the normal
+  // end-of-sentence pause/falling pitch, which is what makes English (but not
+  // Chinese, which doesn't use spaces between characters anyway) sound "off".
   const rough = text.split(/(?<=[。！？\.\!\?\n])\s*/).filter(s => s.trim());
   const chunks = [];
   let buf = '';
   for (const piece of rough) {
     if (piece.length > MAX_LEN) {
-      // A single sentence is itself too long (e.g. no punctuation) — hard-split it.
+      // A single sentence is itself too long (e.g. no punctuation) — hard-split it,
+      // but only ever at a word boundary (see _wordWrapSplit above).
       if (buf) { chunks.push(buf); buf = ''; }
-      for (let i = 0; i < piece.length; i += MAX_LEN) chunks.push(piece.slice(i, i + MAX_LEN));
+      chunks.push(..._wordWrapSplit(piece, MAX_LEN));
       continue;
     }
-    if ((buf + piece).length > MAX_LEN) {
+    const joined = buf ? buf + ' ' + piece : piece;
+    if (joined.length > MAX_LEN) {
       if (buf) chunks.push(buf);
       buf = piece;
     } else {
-      buf += piece;
+      buf = joined;
     }
   }
   if (buf) chunks.push(buf);
