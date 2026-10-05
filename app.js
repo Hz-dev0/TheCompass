@@ -1,7 +1,7 @@
 console.log('[boot] module script started');
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, signInAnonymously, browserSessionPersistence, browserLocalPersistence, inMemoryPersistence, setPersistence } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot, query, where, serverTimestamp, waitForPendingWrites } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, addDoc as _addDoc, setDoc as _setDoc, updateDoc as _updateDoc, deleteDoc as _deleteDoc, getDoc, getDocs, getDocsFromCache, onSnapshot, query, where, serverTimestamp, waitForPendingWrites } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 console.log('[boot] firebase modules imported');
 
 const firebaseConfig = {
@@ -16,10 +16,38 @@ const firebaseConfig = {
 
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
-const db = getFirestore(fbApp);
+// 離線支援：Firestore 啟用 IndexedDB 持久化快取（支援多分頁），離線時直接讀本機快取，
+// 離線期間的寫入會先進本機佇列，恢復連線後自動同步。
+let db;
+try {
+  db = initializeFirestore(fbApp, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  });
+} catch (e) {
+  console.warn('[offline] persistent cache unavailable, fallback to default', e);
+  db = initializeFirestore(fbApp, {});
+}
+
+// 寫入包裝：離線時 Firestore 的寫入 Promise 要等到連線恢復才會 resolve，
+// 會讓 UI 卡在「儲存中…」。本機快取已即時更新，所以最多等 1.2 秒就先繼續；
+// 若之後伺服器拒絕（例如權限錯誤）仍會跳出提示。
+function fast(p) {
+  let timedOut = false;
+  const timer = new Promise(r => setTimeout(() => { timedOut = true; r(); }, 1200));
+  p.catch(e => { if (timedOut) { console.error('[write failed after timeout]', e); showToast('同步失敗：' + (e.code || e.message)); } });
+  return Promise.race([p, timer]);
+}
+const updateDoc = (...a) => fast(_updateDoc(...a));
+const deleteDoc = (...a) => fast(_deleteDoc(...a));
+const setDoc = (...a) => fast(_setDoc(...a));
+const addDoc = async (colRef, data) => {
+  const ref = doc(colRef);
+  await fast(_setDoc(ref, data));
+  return ref;
+};
 
 // DEBUG: expose internals to window for console testing
-window.__debug = { auth, db, getDoc, doc, setDoc, signInAnonymously: null, getAuth, getFirestore, fbApp };
+window.__debug = { auth, db, getDoc, doc, setDoc, signInAnonymously: null, getAuth, fbApp };
 import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js').then(m => {
   window.__debug.signInAnonymously = m.signInAnonymously;
   console.log('[debug] window.__debug ready', window.__debug);
@@ -68,7 +96,7 @@ window.signInWithGoogle = async () => {
 
 // Handle redirect result (after Google login redirect back)
 getRedirectResult(auth).catch(e => {
-  if (e && e.code !== 'auth/no-current-user') showToast('登入失敗：' + e.message);
+  if (e && e.code !== 'auth/no-current-user' && e.code !== 'auth/network-request-failed' && navigator.onLine) showToast('登入失敗：' + e.message);
 });
 
 onAuthStateChanged(auth, user => {
@@ -103,6 +131,8 @@ onAuthStateChanged(auth, user => {
       }
     }
   } else {
+    // 離線模式的驗證碼登入沒有 Firebase 使用者，不要因為 user 為 null 就踢回登入畫面
+    if (currentUser && currentUser._offline) return;
     currentUser = null;
     document.getElementById('auth-screen').style.display = 'flex';
     document.getElementById('app').classList.remove('visible');
@@ -182,10 +212,20 @@ function subscribeData() {
     // which goes through the per-document read rule (delegate check works there).
     window._fetchAnonData = async function fetchAnonData(retryCount = 0) {
       try {
-        const [artSnap, folSnap] = await Promise.all([
-          getDocs(query(collection(db, 'articles'), where('uid','==',ownerUid))),
-          getDocs(query(collection(db, 'folders'), where('uid','==',ownerUid)))
-        ]);
+        const artQ = query(collection(db, 'articles'), where('uid','==',ownerUid));
+        const folQ = query(collection(db, 'folders'), where('uid','==',ownerUid));
+        let artSnap, folSnap;
+        if (!navigator.onLine) {
+          // 離線：直接讀本機快取
+          [artSnap, folSnap] = await Promise.all([getDocsFromCache(artQ), getDocsFromCache(folQ)]);
+        } else {
+          try {
+            [artSnap, folSnap] = await Promise.all([getDocs(artQ), getDocs(folQ)]);
+          } catch (netErr) {
+            if (netErr.code !== 'unavailable') throw netErr;
+            [artSnap, folSnap] = await Promise.all([getDocsFromCache(artQ), getDocsFromCache(folQ)]);
+          }
+        }
         articles = artSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         articles.sort((a,b) => {
           if (a.pinned && !b.pinned) return -1;
@@ -3024,25 +3064,56 @@ window.loginWithPasscode = async () => {
 };
 
 // Check saved passcode on load
+function enterOfflinePasscodeSession(uid) {
+  // 沒網路時：用已儲存的驗證碼資訊直接進入，資料從 Firestore 本機快取讀取
+  currentUser = { uid, _anonUid: 'offline', _offline: true, displayName: '匿名', photoURL: null, isAnonymous: true };
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('user-avatar-wrap').innerHTML = '<div class="user-initials" title="匿名模式（離線）">匿</div>';
+  subscribeData();
+}
+
+async function restorePasscodeSession(uid) {
+  const { signInAnonymously: _sia } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+  passcodeTargetUid = uid;
+  await _sia(auth);
+  // onAuthStateChanged handles the rest
+}
+
 (async function checkPasscode() {
   const uid = localStorage.getItem('passcode_uid');
   const exp = parseInt(localStorage.getItem('passcode_expires') || '0');
   if (uid && Date.now() < exp) {
-    await new Promise(r => setTimeout(r, 1200));
-    if (!currentUser) {
-      try {
-        const { signInAnonymously: _sia } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
-        passcodeTargetUid = uid;
-        await _sia(auth);
-        // onAuthStateChanged handles the rest
-      } catch(e) {
-        localStorage.removeItem('passcode_uid');
-        localStorage.removeItem('passcode_expires');
-        localStorage.removeItem('passcode_code');
+    if (!navigator.onLine) {
+      if (!currentUser) enterOfflinePasscodeSession(uid);
+    } else {
+      await new Promise(r => setTimeout(r, 1200));
+      if (!currentUser) {
+        try {
+          await restorePasscodeSession(uid);
+        } catch(e) {
+          if (e && (e.code === 'auth/network-request-failed' || !navigator.onLine)) {
+            // 網路問題不等於登入失效：保留登入資訊，改用離線模式
+            enterOfflinePasscodeSession(uid);
+          } else {
+            localStorage.removeItem('passcode_uid');
+            localStorage.removeItem('passcode_expires');
+            localStorage.removeItem('passcode_code');
+          }
+        }
       }
     }
   }
 })();
+
+// 離線進入後恢復連線 → 補回真正的匿名登入，讓資料能和伺服器同步
+window.addEventListener('online', async () => {
+  if (currentUser && currentUser._offline) {
+    const uid = currentUser.uid;
+    try { currentUser = null; await restorePasscodeSession(uid); }
+    catch (e) { console.warn('[offline] restore session failed', e); enterOfflinePasscodeSession(uid); }
+  }
+});
 
 // ── Export ──
 window.exportData = () => {
